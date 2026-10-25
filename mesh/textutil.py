@@ -29,6 +29,10 @@ QUOTA_MARKERS = (
     "not logged in",
     "no api key",
     "authentication",
+    "unavailable for free",
+    "model is unavailable",
+    "no endpoints found",
+    "404",
 )
 
 
