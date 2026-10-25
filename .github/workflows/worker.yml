@@ -1,5 +1,7 @@
 name: worker
 
+# 🔄 recheck marker: 2026-10-25T16:55Z — key বদলালে এটা বদলালেই আবার যাচাই হবে
+
 # ☁️ Cloudflare Worker — সম্পূর্ণ অটো ডিপ্লয়
 #
 # 🔑 যেকোনো ধরনের key চলবে, নাম যা-ই হোক:
@@ -123,6 +125,14 @@ jobs:
                                + (" · email নেই তাই Global পথ চেষ্টা করা যায়নি" if not EMAIL else ""))
 
           report = "\n".join(lines) or "- কিছুই পাওয়া যায়নি"
+          if not chosen:
+              report += (
+                  "\n\n👉 কী করতে হবে:\n"
+                  "  ১) https://dash.cloudflare.com/profile/api-tokens → একদম নিচে \"Global API Key\" → View → কপি\n"
+                  "  ২) GitHub → Settings → Secrets → CF_API_KEY = ওই key\n"
+                  "  ৩) CF_EMAIL = Cloudflare লগইন ইমেইল\n"
+                  "  (অথবা \"Edit Cloudflare Workers\" টেমপ্লেট থেকে ৪০ অক্ষরের API Token — শুধু CF_API_TOKEN)"
+              )
           print(report)
           with open("report.txt", "w", encoding="utf-8") as fh:
               fh.write(report + "\n")
