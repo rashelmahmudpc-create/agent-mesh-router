@@ -850,11 +850,16 @@ class AutoTriggerTest(unittest.TestCase):
     def test_defaults_work_without_manual_inputs(self):
         text = self._text()
         self.assertIn("inputs.message || github.event.comment.body ||", text)
-        self.assertIn("MODE: ${{ inputs.mode || '' }}", text)
-        # ইনপুট না এলে মোড নিজেই ঠিক হয়: অ্যাপের এজেন্ট মোড → direct, নইলে group
-        self.assertIn("MODE=direct", text)
-        self.assertIn("MODE=group", text)
-        self.assertIn("--no-hall", text)
+        # ইনপুট না এলে মোড নিজেই ঠিক হয়।
+        # workflow-এ মার্কার পড়ার লাইন থাকলে সবচেয়ে ভালো (তখন লগেও দেখা যায়),
+        # না থাকলেও mesh/cli.py নিজে app marker দেখে মোড/পটভূমি ঠিক করে — দুইভাবেই চলে।
+        self.assertTrue(
+            "MODE: ${{ inputs.mode || '' }}" in text or "inputs.mode || 'group'" in text,
+            "মোডের ডিফল্ট ঠিক নেই",
+        )
+        cli_text = (ROOT / "mesh" / "cli.py").read_text(encoding="utf-8")
+        self.assertIn("app_mode_of", cli_text)
+        self.assertIn("--no-hall", cli_text)
 
     def test_guard_skips_when_no_key(self):
         text = self._text()

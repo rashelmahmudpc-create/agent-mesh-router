@@ -27,11 +27,41 @@ Actions রানের লগ (run 40218594334) ও Issue #3-এর comment থ
 - `mesh/issue.py` — `fetch_hall()` comment থেকে মার্কার/`@mesh` বাদ দেয়, `FAILURE_MARKERS` লাইনগুলো (❌) বাদ দেয়, উল্টো ক্রমে (নতুন আগে) পড়ে।
 - `mesh/adapters.py` — `MAX_TIMEOUT_TRIES = 2`: সময় শেষ হলে (code 124) পরের fallback মডেল একবার চেষ্টা করে,
   তারপর "⏱️ … সেকেন্ডের মধ্যে উত্তর আসেনি" বলে ছেড়ে দেয়।
-- `mesh/cli.py` — নতুন `--no-hall` (অ্যাপ নিজেই আগের কথা পাঠায়)।
+- `mesh/cli.py` — মোড/পটভূমি এখন **মার্কার থেকেই** ঠিক হয়: `mode:agent` → direct, অ্যাপ থেকে এলে `--no-hall`.
+  (তাই workflow-এ হাত না দিলেও অ্যাপ ঠিকঠাক চলে।)
 - `config/agents.json` — claude `chat_timeout_sec` 150 → 240 (নোটে কারণ লেখা)।
 - `worker/index.js` — ধীর (Actions) পথে এখন অ্যাপের শেষ ৪ কথা `[আগের কথা]` ব্লকে যায় + `<!-- app:<ts> mode:agent|group -->` মার্কার।
 - `docs/app/index.html` — GitHub সরাসরি পথেও একই mode মার্কার।
 - `.github/workflows/mesh.yml` — মার্কার পড়ে মোড ঠিক করে: `mode:agent` → `direct`, নইলে `group`; অ্যাপ থেকে এলে `--no-hall`।
+  ⚠️ **এটা এখনো push হয়নি** — টোকেনে `workflows` পারমিশন নেই ("refusing to allow a GitHub App to create or update workflow")।
+  দরকার নেই — `mesh/cli.py` নিজেই একই কাজ করে (নিচে যাচাই করা আছে)। লগে `app=1` দেখতে চাইলে নিচের প্যাচটা GitHub-এর ওয়েবে বসান:
+
+```diff
+-          MODE: ${{ inputs.mode || 'group' }}
++          MODE: ${{ inputs.mode || '' }}
+         run: |
+           set -uo pipefail
+           HALL=3
+           if [ -z "${ISSUE:-}" ] && [ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ]; then
+             ISSUE="$HALL"
+           fi
++          # 📱 অ্যাপ থেকে এসেছে কি? (`<!-- app:… mode:agent|group -->` মার্কার থাকে)
++          APP=0
++          if printf '%s' "$MSG" | grep -q '<!-- app:'; then APP=1; fi
++          if [ -z "${MODE:-}" ]; then
++            if [ "$APP" = "1" ] && printf '%s' "$MSG" | grep -q 'mode:agent'; then
++              MODE=direct
++            else
++              MODE=group
++            fi
++          fi
+           args=(--mode "$MODE")
+           if [ -n "$ISSUE" ]; then args+=(--issue "$ISSUE"); fi
++          if [ "$APP" = "1" ]; then args+=(--no-hall); fi
+           if [ "$DRY" = "true" ]; then args+=(--dry-run); fi
+-          echo "▶️ mode=$MODE dry=$DRY issue=${ISSUE:-none}"
++          echo "▶️ mode=$MODE dry=$DRY issue=${ISSUE:-none} app=$APP"
+```
 - `tests/test_mesh.py`, `tests/js/worker_check.mjs` — নতুন আচরণের টেস্ট (প্রম্পট পরিষ্কার, ক্রম, টাইমআউট fallback, fetch_hall ফিল্টার, মার্কার)।
 
 ## Verified
@@ -61,7 +91,10 @@ $ node --check worker/index.js → OK ; docs/app/index.html এর ৪টা scr
 
 ## Still open
 
-- অ্যাপ থেকে **নতুন একটা** প্রশ্ন পাঠিয়ে দেখতে হবে: উত্তর একজনের, প্রাসঙ্গিক, আর কত সেকেন্ড লাগে।
+- **স্যারের কাজ (১০ সেকেন্ড):** অ্যাপ থেকে একটা নতুন প্রশ্ন পাঠিয়ে দেখুন — একজন উত্তর দিচ্ছে কি,
+  প্রাসঙ্গিক কি, কত সেকেন্ড লাগছে।
+- (ঐচ্ছিক) উপরের workflow প্যাচটা GitHub-এর ওয়েবে `.github/workflows/mesh.yml` এ বসালে লগে `app=1` দেখা যাবে।
+  না বসালেও অ্যাপ কাজ করবে — এটা যাচাই করা।
 - Claude এখনো ২৪০ সেকেন্ডে না পারলে আগের মতোই ব্যর্থ দেখাবে (তবে বার্তা পরিষ্কার, আর একবার fallback চেষ্টা করে)।
 - `worker/wrangler.toml` এর `FAST=off` স্যারের সিদ্ধান্ত — বদলানো হয়নি।
 
@@ -70,3 +103,5 @@ $ node --check worker/index.js → OK ; docs/app/index.html এর ৪টা scr
 - `config/agents.json` এর `max_calls_per_run` / `max_rounds` / `max_pair_calls` — কমানো/বাড়ানো নয়।
 - `FAST=off` সিদ্ধান্ত (স্যার নিজে বদলাবেন)।
 - Issue #3 পুরনো; ইতিহাস মুছবেন না (প্রমাণ হিসেবে দরকার)।
+- `.github/workflows/mesh.yml` লোকালে বদলানো আছে কিন্তু push করা যায়নি (টোকেনে `workflows` পারমিশন নেই) —
+  ভুলে `git checkout` দিয়ে মুছে ফেলবেন না; প্যাচটা উপরে লেখা আছে।
