@@ -132,6 +132,20 @@ jobs:
               except Exception as exc:  # noqa: BLE001
                   return 0, {"errors": [{"message": str(exc)}]}
 
+          # 🔎 key-এর "আকৃতি" দেখি — মান নয়, শুধু ধরন বোঝার জন্য
+          shape = f"length={len(token)}"
+          if all(c in "0123456789abcdefABCDEF" for c in token):
+              shape += " hex-only"
+          if "-" in token or "_" in token:
+              shape += " has-dash/underscore"
+          print(f"KEY shape: {shape}")
+          if len(token) == 37 and all(c in "0123456789abcdefABCDEF" for c in token):
+              print("  ⇒ এটা Global API Key-এর মতো দেখাচ্ছে — তাহলে CF_EMAIL secret-ও দরকার")
+          elif len(token) < 30:
+              print("  ⇒ খুব ছোট — সম্ভবত পুরো token কপি হয়নি")
+          else:
+              print("  ⇒ API Token-এর মতো দেখাচ্ছে (ঠিক আছে, শুধু মানটা বৈধ নয়)")
+
           status, data = call("/user/tokens/verify")
           ok = bool(data.get("success")) and (data.get("result") or {}).get("status") == "active"
           print(f"VERIFY mode=bearer ok={ok} status={status}")

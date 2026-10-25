@@ -231,6 +231,10 @@ class AutoDeployTest(unittest.TestCase):
         self.assertIn("issues: write", self.wf)
         self.assertIn("gh issue comment", self.wf)
 
+    def test_key_shape_is_diagnosed_without_leaking_it(self):
+        self.assertIn("KEY shape", self.wf)
+        self.assertNotIn("print(token)", self.wf)
+
     def test_worker_workflow_rechecks_itself(self):
         """key পরে ঠিক করলেও যেন নিজে থেকে ধরা পড়ে।"""
         self.assertIn("schedule:", self.wf)
