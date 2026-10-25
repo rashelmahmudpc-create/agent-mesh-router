@@ -53,7 +53,7 @@
       "name": "cline",
       "label": "🟦 Cline",
       "kind": "cli",
-      "enabled": true,
+      "enabled": false,
       "roles": [
         "worker",
         "chat"
@@ -75,7 +75,7 @@
         "রিভিউ",
         "ডিজাইন"
       ],
-      "notes": "OpenRouter প্রোভাইডার দিয়ে চালানোর চেষ্টা (আগের 'Unauthorized' এড়াতে)",
+      "notes": "⚠️ বন্ধ: OpenRouter ফ্রি টিয়ারে Cline ২,৮৩,১১৫ টোকেন চায়, afford করে ৩৩,৩২৩ — 'requires more credits'। আপাতত OpenCode (fallback সহ) ও Claude Code যথেষ্ট",
       "env": {
         "OPENROUTER_API_KEY": "$OPENROUTER_API_KEY"
       }
@@ -111,7 +111,16 @@
         "গুরুত্বপূর্ণ",
         "আর্কিটেকচার"
       ],
-      "notes": "যাচাই করা: v2.1.310, `-p` ঠিক আছে। টাকা নেই? $0 চলবে — OpenRouter এর :free মডেল (ডিফল্ট openrouter/free), key ছাড়া কার্ড লাগে না"
+      "notes": "যাচাই করা: `-p` কাজ করে, বাংলায় উত্তর দেয়। খালি উত্তর এলে fallback হিসেবে নির্দিষ্ট ফ্রি মডেল চেষ্টা করে",
+      "fallback_commands": [
+        [
+          "claude",
+          "-p",
+          "{message}",
+          "--model",
+          "$CLAUDE_FALLBACK_MODEL:-z-ai/glm-5.2:free"
+        ]
+      ]
     },
     {
       "name": "hermes",
