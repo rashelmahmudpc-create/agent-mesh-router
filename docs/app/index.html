@@ -343,6 +343,18 @@ pre.contract{background:var(--code);border:1px solid var(--line);border-radius:1
     <input class="field" id="sGhToken" placeholder="GitHub টোকেন (Issues: Read & Write)" autocapitalize="off" autocorrect="off" type="password">
     <button class="btn2" id="sGhTest"><span data-ic="refresh" data-s="18"></span>GitHub টেস্ট</button>
 
+    <div class="sec">⚡ দ্রুত মোড (সেকেন্ডে উত্তর)</div>
+    <p class="note">ফ্রি AI কী বসালেই উত্তর <b>১–৫ সেকেন্ডে</b> চলে আসবে — কোনো সার্ভার লাগে না। কী শুধু আপনার ফোনে জমা থাকে। (রিপোর আসল কাজ এজেন্টরা GitHub-এ করবে — সেটা ৩–৯ মিনিট।)</p>
+    <div class="row"><label>দ্রুত মোড চালু<small>বন্ধ = এজেন্টরা উত্তর দেবে</small></label><button class="sw" id="sFast"></button></div>
+    <select class="field" id="sFastProv">
+      <option value="groq">Groq — সবচেয়ে দ্রুত (ফ্রি)</option>
+      <option value="gemini">Google Gemini (ফ্রি)</option>
+      <option value="openrouter">OpenRouter (ফ্রি মডেল)</option>
+    </select>
+    <input class="field" id="sFastKey" placeholder="API key (gsk_… / AIza… / sk-or-…)" autocapitalize="off" autocorrect="off" type="password">
+    <input class="field" id="sFastModel" placeholder="মডেল (খালি রাখলে ডিফল্ট)" autocapitalize="off" autocorrect="off">
+    <button class="btn2" id="sFastTest"><span data-ic="refresh" data-s="18"></span>⚡ দ্রুত টেস্ট</button>
+
     <div class="sec">এজেন্ট টিম</div>
     <div id="agentList"></div>
 
@@ -438,14 +450,16 @@ const REAL_AGENTS=[
  {id:'claude',name:'Claude Code',role:'প্ল্যান/কোড',emoji:'🟠',color:'#d97757'},
  {id:'hermes',name:'Hermes',role:'ম্যানেজার',emoji:'☤',color:'#8b5cf6'},
  {id:'openhands',name:'OpenHands',role:'অটোমেশন',emoji:'🖐️',color:'#f59e0b'}];
-const cfg=Object.assign({theme:'dark',accent:'#d97757',fs:17,name:'',server:'',token:'',demo:true,lang:'bn-BD',speak:true,mode:'agent',ghRepo:'rashelmahmudpc-create/agent-mesh-router',ghIssue:'3',ghToken:''},lsGet('ax.cfg',{}));
+const cfg=Object.assign({theme:'dark',accent:'#d97757',fs:17,name:'',server:'',token:'',demo:true,lang:'bn-BD',speak:true,mode:'agent',ghRepo:'rashelmahmudpc-create/agent-mesh-router',ghIssue:'3',ghToken:'',fastMode:true,fastProvider:'groq',fastKey:'',fastModel:''},lsGet('ax.cfg',{}));
 const S={chats:lsGet('ax.chats',[]),cur:null,busy:false,ac:null,atts:[],agents:DEMO_AGENTS,conn:'demo',stick:true,dict:null};
 const ELS=new WeakMap();
 const saveCfg=()=>lsSet('ax.cfg',cfg);
 const saveChats=()=>lsSet('ax.chats',S.chats.slice(0,60));
 // ফাঁকা সার্ভার + GitHub টোকেন থাকলে = "GitHub সরাসরি" মোড (Worker ছাড়া)
 const isGh=()=>!cfg.server.trim()&&!!String(cfg.ghToken||'').trim();
-const isDemo=()=>cfg.demo||(!cfg.server.trim()&&!isGh());
+// ⚡ দ্রুত মোড: ফ্রি AI কী থাকলে সেকেন্ডেই উত্তর (সার্ভার লাগে না)
+const fastOn=()=>!!cfg.fastMode&&!!String(cfg.fastKey||'').trim();
+const isDemo=()=>cfg.demo||(!cfg.server.trim()&&!isGh()&&!fastOn());
 const curChat=()=>S.chats.find(c=>c.id===S.cur);
 const feed=$('#feed'),scroller=$('#scroll'),inp=$('#inp');
 
@@ -609,7 +623,7 @@ const WELCOME={
  group:[['💬','সবাই পরিচয় দাও','সবাই নিজের পরিচয় দাও'],['🧠','ব্রেনস্টর্ম','একটা নতুন অ্যাপের আইডিয়া নিয়ে সবাই মত দাও'],['⚖️','তর্ক-বিতর্ক','React না Vue — সবাই নিজের মত দাও'],['🚀','প্ল্যান বানাও','একটা প্রজেক্টের প্ল্যান সবাই মিলে বানাও']]
 };
 function welcomeHTML(){
-  const st=isDemo()?['','ডেমো মোড']:S.conn==='ok'?['ok',isGh()?'GitHub-এ সংযুক্ত':'সার্ভারে সংযুক্ত']:S.conn==='bad'?['bad',isGh()?'GitHub পাওয়া যাচ্ছে না':'সার্ভার পাওয়া যাচ্ছে না']:['','সংযোগ হচ্ছে…'];
+  const st=fastOn()?['ok','⚡ দ্রুত মোড']:isDemo()?['','ডেমো মোড']:S.conn==='ok'?['ok',isGh()?'GitHub-এ সংযুক্ত':'সার্ভারে সংযুক্ত']:S.conn==='bad'?['bad',isGh()?'GitHub পাওয়া যাচ্ছে না':'সার্ভার পাওয়া যাচ্ছে না']:['','সংযোগ হচ্ছে…'];
   const g=cfg.mode==='agent'?'কী করতে হবে লিখুন — বাকিটা এজেন্টরা দেখবে।':'গ্রুপে সবাই আছে — একটা কথা বলুন, যে যার মতো উত্তর দেবে।';
   return `<div class="welcome"><div class="logo">${ic('sparkle',38)}</div><h1>আসসালামু আলাইকুম${cfg.name?', '+esc(cfg.name):''} 👋</h1><p>${g}</p><div class="cards">${WELCOME[cfg.mode].map(c=>`<button class="card" data-q="${esc(c[2])}"><span class="e">${c[0]}</span>${c[1]}</button>`).join('')}</div><button class="conn-chip ${st[0]}" id="chipSet"><i></i>${st[1]}</button></div>`;
 }
@@ -711,6 +725,7 @@ const ghApi=p=>`https://api.github.com/repos/${String(cfg.ghRepo||'').trim()}${p
 const ghHdr=json=>{const h={Accept:'application/vnd.github+json'};if(json)h['Content-Type']='application/json';if(cfg.ghToken)h.Authorization='Bearer '+String(cfg.ghToken).trim();return h};
 const ghOk=()=>/^[\w.-]+\/[\w.-]+$/.test(String(cfg.ghRepo||'').trim());
 async function ping(){
+  if(fastOn()){S.conn='ok';paintConn();return}
   if(isDemo()){S.conn='demo';paintConn();return}
   if(isGh()){
     try{
@@ -820,6 +835,67 @@ async function ghRun(req,onEv,sig){
 }
 
 
+/* ---------- ⚡ দ্রুত মোড: ব্রাউজার → AI API (১–৫ সেকেন্ডে উত্তর) ---------- */
+// কোনো সার্ভার নেই; কী শুধু ফোনের localStorage-এ। OpenAI-সদৃশ চুক্তি — তিন প্রোভাইডারই একই।
+const FAST_PROVIDERS={
+  groq:{base:'https://api.groq.com/openai/v1',model:'llama-3.3-70b-versatile'},
+  gemini:{base:'https://generativelanguage.googleapis.com/v1beta/openai',model:'gemini-2.0-flash'},
+  openrouter:{base:'https://openrouter.ai/api/v1',model:'meta-llama/llama-3.3-70b-instruct:free'},
+};
+const fastProv=()=>FAST_PROVIDERS[cfg.fastProvider]||FAST_PROVIDERS.groq;
+const FAST_SYS='তুমি "এজেন্ট টিম" অ্যাপের সহকারী। সহজ, প্রাঞ্জল বাংলায় ছোট ও কাজের উত্তর দাও — বাড়তি ভূমিকা নয়। দরকার হলে বুলেট বা ছোট টেবিল ব্যবহার করো।';
+async function fastCall(messages,onDelta,sig){
+  const p=fastProv();
+  const r=await fetch(p.base.replace(/\/+$/,'')+'/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json',Authorization:'Bearer '+String(cfg.fastKey).trim()},
+    body:JSON.stringify({model:String(cfg.fastModel||p.model).trim(),messages,stream:true,temperature:.6}),
+    signal:sig});
+  if(!r.ok){
+    let t='';try{t=(await r.text()).slice(0,200)}catch{}
+    throw new Error(`API ${r.status}${r.status===401?' — কী ভুল':r.status===429?' — আজকের ফ্রি সীমা শেষ':''}${t?' — '+t:''}`);
+  }
+  const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
+  for(;;){
+    const {done,value}=await rd.read();if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    let i;
+    while((i=buf.indexOf('\n'))>=0){
+      const line=buf.slice(0,i).trim();buf=buf.slice(i+1);
+      if(!line.startsWith('data:'))continue;
+      const d=line.slice(5).trim();
+      if(!d||d==='[DONE]')continue;
+      try{const t=JSON.parse(d)?.choices?.[0]?.delta?.content;if(t)onDelta(t)}catch{}
+    }
+  }
+}
+function fastHistory(chat){
+  return (chat.msgs||[]).filter(m=>m.text&&m.role!=='agent').slice(-6)
+    .map(m=>({role:m.role==='user'?'user':'assistant',content:m.text}));
+}
+async function fastRun(req,onEv,sig){
+  onEv({type:'status',text:'⚡ দ্রুত মোড — সেকেন্ডেই উত্তর আসবে'});
+  const hist=fastHistory(req.chat);
+  if(req.mode==='group'){
+    // তিন ভূমিকায় একসাথে (parallel) উত্তর — তাই সবার লেখা প্রায় একসাথে আসে
+    const team=DEMO_AGENTS.slice(0,3);
+    team.forEach(a=>onEv({type:'typing',agent:a}));
+    await Promise.all(team.map(async a=>{
+      const id='f-'+a.id;
+      try{
+        await fastCall([{role:'system',content:`${FAST_SYS} এই মুহূর্তে তুমি "${a.name}" (${a.role}) — নিজের ভূমিকা থেকে ২–৪ লাইনে বলো।`},...hist,{role:'user',content:req.text}],
+          t=>onEv({type:'agent_message',id,agent:a,delta:t}),sig);
+      }catch(e){
+        onEv({type:'agent_message',id,agent:a,text:'❌ '+e.message});
+      }
+    }));
+    return;
+  }
+  await fastCall([{role:'system',content:FAST_SYS},...hist,{role:'user',content:req.text}],
+    t=>onEv({type:'delta',text:t}),sig);
+}
+
+
 /* ---------- event handling ---------- */
 function typingEl(a){
   const el=document.createElement('div');el.className='msg ag typing';
@@ -876,11 +952,11 @@ async function sendMessage(text,opts={}){
   try{
     let uploaded=[];
     if(!isDemo()&&!isGh()&&atts.length){if(ctx.m){ctx.m.status='ফাইল আপলোড হচ্ছে…';refreshAI(ctx.m)}uploaded=await uploadAll(atts,sig)}
-    const run=isDemo()?demoRun:isGh()?ghRun:netRun;
+    const run=fastOn()?fastRun:isDemo()?demoRun:isGh()?ghRun:netRun;
     await run({text,uploaded,mode:cfg.mode,chat,voice:opts.voice,atts},ev=>handleEv(ev,ctx),sig);
   }catch(e){
     if(e.name==='AbortError'){if(ctx.m&&ctx.m.text)ctx.m.text+='\n\n_— থামানো হয়েছে_'}
-    else{const msg=(e.message||'সংযোগে সমস্যা')+(isDemo()?'':isGh()?' — GitHub টোকেন/রিপো/Issue দেখুন':' — সার্ভারের ঠিকানা/টোকেন দেখুন');if(ctx.m)ctx.m.err=msg;else toast(msg)}
+    else{const msg=(e.message||'সংযোগে সমস্যা')+(fastOn()?' — ⚡ API কী/মডেল দেখুন':isDemo()?'':isGh()?' — GitHub টোকেন/রিপো/Issue দেখুন':' — সার্ভারের ঠিকানা/টোকেন দেখুন');if(ctx.m)ctx.m.err=msg;else toast(msg)}
   }
   Object.values(ctx.typing).forEach(r=>r.remove());
   if(ctx.m){flush(ctx.m);ctx.m.live=false;ctx.m.dur=(Date.now()-t0)/1000;ctx.m.status='';refreshAI(ctx.m,true)}
@@ -1040,6 +1116,8 @@ function buildSettings(){
   $('#sName').value=cfg.name;$('#sFs').value=cfg.fs;$('#sLang').value=cfg.lang;
   $('#sServer').value=cfg.server;$('#sToken').value=cfg.token;
   $('#sGhRepo').value=cfg.ghRepo;$('#sGhIssue').value=cfg.ghIssue;$('#sGhToken').value=cfg.ghToken;
+  $('#sFastProv').value=cfg.fastProvider;$('#sFastKey').value=cfg.fastKey;$('#sFastModel').value=cfg.fastModel;
+  $('#sFast').classList.toggle('on',!!cfg.fastMode);
   $('#sSpeak').classList.toggle('on',cfg.speak);$('#sDemo').classList.toggle('on',cfg.demo);
 }
 $('#themes').onclick=e=>{const b=e.target.closest('[data-t]');if(!b)return;cfg.theme=b.dataset.t;saveCfg();applyTheme();buildSettings();reMermaid()};
@@ -1056,6 +1134,17 @@ $('#sToken').onchange=e=>{cfg.token=e.target.value.trim();saveCfg();ping()};
 $('#sGhRepo').onchange=e=>{cfg.ghRepo=e.target.value.trim();saveCfg();ping()};
 $('#sGhIssue').onchange=e=>{cfg.ghIssue=e.target.value.trim().replace(/[^0-9]/g,'')||'3';saveCfg();buildSettings();ping()};
 $('#sGhToken').onchange=e=>{cfg.ghToken=e.target.value.trim();if(cfg.ghToken&&!cfg.server.trim())cfg.demo=false;saveCfg();buildSettings();ping()};
+$('#sFast').onclick=()=>{cfg.fastMode=!cfg.fastMode;saveCfg();buildSettings();ping()};
+$('#sFastProv').onchange=e=>{cfg.fastProvider=e.target.value;saveCfg();buildSettings();ping()};
+$('#sFastKey').onchange=e=>{cfg.fastKey=e.target.value.trim();if(cfg.fastKey)cfg.fastMode=true;saveCfg();buildSettings();ping()};
+$('#sFastModel').onchange=e=>{cfg.fastModel=e.target.value.trim();saveCfg()};
+$('#sFastTest').onclick=async()=>{
+  if(!String(cfg.fastKey||'').trim()){toast('আগে ফ্রি AI কী বসান');return}
+  let mark='bad';
+  try{await fastCall([{role:'user',content:'শুধু "ঠিক আছে" লিখো'}],()=>{},undefined);mark='ok'}catch(e){toast(String(e.message||e).slice(0,90))}
+  S.conn=mark;paintConn();
+  if(mark==='ok')toast('⚡ দ্রুত মোড কাজ করছে ✓ (১–২ সেকেন্ড)');
+};
 $('#sGhTest').onclick=async()=>{
   if(!ghOk()){toast('রিপো owner/repo আকারে দিন');return}
   if(!String(cfg.ghToken||'').trim()){toast('আগে GitHub টোকেন বসান');return}

@@ -25,6 +25,9 @@ ALLOWED_CDN = (
     "cdn.jsdelivr.net",
     "cdnjs.cloudflare.com",
     "api.github.com",  # GitHub সরাসরি মোড (Worker ছাড়া) — ব্রাউজার থেকে Issue পড়া/লেখা
+    "api.groq.com",  # ⚡ দ্রুত মোড — ব্রাউজার থেকে সরাসরি AI API
+    "generativelanguage.googleapis.com",  # ⚡ দ্রুত মোড (Gemini)
+    "openrouter.ai",  # ⚡ দ্রুত মোড (OpenRouter)
     "your-server.com",  # সেটিংসের প্লেসহোল্ডার
 )
 
