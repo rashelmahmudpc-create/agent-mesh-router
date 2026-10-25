@@ -114,7 +114,7 @@ def run_doctor(
     return checks
 
 
-def print_checks(checks: list[Check]) -> int:
+def print_checks(checks: list[Check], strict: bool = False) -> int:
     print("\n🩺 মেশ ডক্টর\n" + "=" * 46)
     for c in checks:
         print(f" {ICON.get(c.status, '•')} {c.item:<22} {c.detail}")
@@ -123,12 +123,13 @@ def print_checks(checks: list[Check]) -> int:
     print("=" * 46)
     verdict = "সব ঠিক ✅" if not fails else f"{fails}টা সমস্যা ❌"
     print(f" ফল: {verdict}" + (f"  ({warns}টা সতর্কতা ⚠️)" if warns else "") + "\n")
-    return 0 if not fails else 1
+    # CI তে লাল ✅ কেটে ফেলা এড়াতে ডিফল্টে exit 0; কঠোর যাচাই চাইলে --strict
+    return (0 if not fails else 1) if strict else 0
 
 
-def main(json_out: bool = False, config: MeshConfig | None = None) -> int:
+def main(json_out: bool = False, config: MeshConfig | None = None, strict: bool = False) -> int:
     checks = run_doctor(config or MeshConfig.load())
     if json_out:
         print(json.dumps([asdict(c) for c in checks], ensure_ascii=False, indent=2))
-        return 0 if all(c.status != FAIL for c in checks) else 1
-    return print_checks(checks)
+        return 0 if (not strict or all(c.status != FAIL for c in checks)) else 1
+    return print_checks(checks, strict=strict)

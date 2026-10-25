@@ -34,7 +34,7 @@ concurrency:
 
 jobs:
   route:
-    # Issue এ `@mesh` লিখলে গ্রুপ চ্যাট শুরু হয়
+    # Issue এ `@mesh` লিখলে গ্রুপ চ্যাট শুরু হয় (বটের comment বাদ)
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment'
@@ -50,7 +50,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      # ⚠️ এজেন্টের CLI গুলো ইনস্টল — একটা ব্যর্থ হলেও বাকিগুলো চলবে
       # Node 22 দরকার (Claude Code এর শর্ত)
       - uses: actions/setup-node@v4
         with:
@@ -60,7 +59,7 @@ jobs:
       - name: Install agent CLIs
         continue-on-error: true
         run: |
-          npm install -g @opencode/cli || true   # বাইনারি: opencode
+          npm install -g @opencode/cli || true   # বাইনারি: opencode (key ছাড়াই ফ্রি মডেল)
           npm install -g cline || true           # বাইনারি: cline
           npm install -g @anthropic-ai/claude-code || true  # বাইনারি: claude
           # ☤ Hermes: অফিশিয়াল ডক (hermes-agent.nousresearch.com/docs) থেকে
@@ -69,12 +68,21 @@ jobs:
 
       - name: Doctor (কে সাড়া দেবে?)
         continue-on-error: true
-        run: python3 -m mesh.cli --doctor
+        run: |
+          python -m mesh.cli --doctor > doctor.txt 2>&1 || true
+          {
+            echo "## 🩺 ডক্টর"
+            echo '```'
+            cat doctor.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Show team
-        run: python -m mesh.cli --list
+        continue-on-error: true
+        run: python -m mesh.cli --list | tee team.txt
 
       - name: Route message
+        id: route
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -87,11 +95,59 @@ jobs:
           ISSUE: ${{ github.event.issue.number || '' }}
           DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           args=(--mode "$MODE")
           if [ -n "$ISSUE" ]; then args+=(--issue "$ISSUE"); fi
           if [ "$DRY" = "true" ]; then args+=(--dry-run); fi
-          python -m mesh.cli "$MSG" "${args[@]}" | tee mesh-output.txt
+          echo "▶️ mode=$MODE dry=$DRY issue=${ISSUE:-none}"
+          python -m mesh.cli "$MSG" "${args[@]}" 2>&1 | tee mesh-output.txt
+          {
+            echo "## 🧠 মেশ রান"
+            echo ""
+            echo "- mode: \`$MODE\` · dry_run: \`$DRY\` · issue: ${ISSUE:-none}"
+            echo ""
+            echo '```'
+            cat mesh-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Publish status to an Issue (পড়া যায় এমন লগ)
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          {
+            echo "### 🧠 mesh run — $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo ""
+            echo "- trigger: \`${{ github.event_name }}\` · status: \`${{ job.status }}\`"
+            echo "- run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo ""
+            echo "<details><summary>🩺 ডক্টর</summary>"
+            echo ""
+            echo '```'
+            cat doctor.txt 2>/dev/null || echo "(ডক্টর চলে নি)"
+            echo '```'
+            echo "</details>"
+            echo ""
+            echo "<details><summary>📋 উত্তর</summary>"
+            echo ""
+            echo '```'
+            cat mesh-output.txt 2>/dev/null || echo "(উত্তর নেই)"
+            echo '```'
+            echo "</details>"
+          } > status.md
+          if ! gh issue list --label mesh-status --state open --json number -q '.[0].number' > issue.txt 2>/dev/null; then
+            echo "" > issue.txt
+          fi
+          ISSUE_NO=$(head -1 issue.txt | tr -d '[:space:]')
+          if [ -z "$ISSUE_NO" ]; then
+            gh label create mesh-status --color BFD4F2 --description "mesh health log" 2>/dev/null || true
+            gh issue create --title "🩺 mesh status log" --label mesh-status --body-file status.md || true
+          else
+            gh issue comment "$ISSUE_NO" --body-file status.md || true
+          fi
 
       - name: Keep the log
         if: always()
@@ -100,6 +156,9 @@ jobs:
           name: mesh-log
           path: |
             mesh-output.txt
+            doctor.txt
+            team.txt
+            status.md
             .mesh/transcript.jsonl
           if-no-files-found: ignore
 

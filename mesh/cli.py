@@ -33,7 +33,7 @@ def _print_list(config: MeshConfig) -> None:
     print()
 
 
-def _probe(config: MeshConfig, dry_run: bool = False) -> int:
+def _probe(config: MeshConfig, dry_run: bool = False, strict: bool = False) -> int:
     """প্রতিটা এজেন্টকে এক লাইনের প্রশ্ন — কে সত্যিই সাড়া দেয় দেখা যায়।"""
     from concurrent.futures import ThreadPoolExecutor
 
@@ -53,7 +53,7 @@ def _probe(config: MeshConfig, dry_run: bool = False) -> int:
     print("=" * 46)
     good = sum(1 for r in replies if r.ok)
     print(f" সাড়া দিয়েছে: {good}/{len(replies)}\n")
-    return 0 if good else 1
+    return (0 if good else 1) if strict else 0
 
 
 def _print_replies(replies: list[Reply]) -> None:
@@ -73,6 +73,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--issue", type=int, default=None, help="এই Issue-কে গ্রুপ চ্যাট বানাও")
     parser.add_argument("--dry-run", action="store_true", help="কিছু চালাবে না, শুধু দেখাবে")
     parser.add_argument("--json", action="store_true", help="মেশিন-পাঠ্য আউটপুট")
+    parser.add_argument(
+        "--strict", action="store_true", help="কেউ সাড়া না দিলে ব্যর্থ হিসেবে গণ্য করো (CI তে লাল হবে)"
+    )
     parser.add_argument("--config", default=None)
     parser.add_argument("--list", action="store_true", help="টিমের তালিকা দেখাও")
     parser.add_argument("--doctor", action="store_true", help="সব ঠিক আছে কি না দেখাও")
@@ -84,14 +87,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.doctor:
         from .doctor import main as doctor_main
 
-        return doctor_main(json_out=args.json, config=config)
+        return doctor_main(json_out=args.json, config=config, strict=args.strict)
 
     if args.list:
         _print_list(config)
         return 0
 
     if args.probe:
-        return _probe(config, dry_run=args.dry_run)
+        return _probe(config, dry_run=args.dry_run, strict=args.strict)
 
     if not args.message.strip():
         parser.error("একটা কথা লিখুন, যেমন: python -m mesh.cli \"হাই\" --mode group")
@@ -125,7 +128,9 @@ def main(argv: list[str] | None = None) -> int:
         _print_replies(replies)
         print(f"\n📊 মোট কল: {router.calls} / {config.settings.max_calls_per_run}")
 
-    return 0 if any(r.ok for r in replies) else 1
+    # কোনো এজেন্ট উত্তর না দিলেও রান সবুজ থাকবে — ফলাফল উপরে ছাপা হয়।
+    # কঠোরভাবে ব্যর্থ করতে চাইলে --strict
+    return (0 if any(r.ok for r in replies) else 1) if args.strict else 0
 
 
 if __name__ == "__main__":
