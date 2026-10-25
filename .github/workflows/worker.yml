@@ -26,6 +26,7 @@ on:
 
 permissions:
   contents: write # docs/app/server.json কমিট করার জন্য
+  issues: write   # টোকেন যাচাইয়ের রিপোর্ট Issue #5-এ দেখাতে
 
 concurrency:
   group: worker-deploy
@@ -149,6 +150,28 @@ jobs:
             report.txt
             accounts.json
           if-no-files-found: ignore
+
+      - name: রিপোর্ট Issue #5-এ লেখো (পড়া যায় এমন)
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          [ -f report.txt ] || exit 0
+          {
+            echo "### ☁️ Cloudflare টোকেন যাচাই — $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo ""
+            echo "- secret: \`${{ steps.token.outputs.name || '(পাওয়া যায়নি)' }}\`"
+            echo "- run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo ""
+            echo '```'
+            cat report.txt
+            echo '```'
+          } > cf-report.md
+          NO=$(gh issue list --label mesh-status --state open --json number -q '.[0].number' 2>/dev/null || true)
+          [ -z "$NO" ] && NO=5
+          gh issue comment "$NO" --body-file cf-report.md || true
 
       - name: Account ID ঠিক করো
         id: account
