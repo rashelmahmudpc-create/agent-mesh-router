@@ -31,6 +31,11 @@ QUOTA_MARKERS = (
     "authentication",
     "unavailable for free",
     "model is unavailable",
+    "model unavailable",
+    "model not found",
+    "not allowed to access model",
+    "no allowed providers",
+    "does not exist",
     "no endpoints found",
     "404",
 )
@@ -54,6 +59,18 @@ def looks_like_quota_problem(*chunks: str) -> bool:
     return any(marker in blob for marker in QUOTA_MARKERS)
 
 
+# কিছু ফ্রি মডেল টুল-কল লেখা হিসেবে ছাপে (Claude Code/OpenCode) — ওগুলো উত্তর নয়
+TOOL_CALL_RE = re.compile(r"<tool_call>.*?</tool_call>|<tool_call>.*\Z", re.DOTALL)
+TOOL_XML_RE = re.compile(r"</?(?:tool_call|param_key|param_value|function_calls?|invoke)\b[^>]*>")
+TOOL_XML_TAIL_RE = re.compile(r"<tool_call>.*\Z", re.DOTALL)
+
+
+def strip_tool_calls(text: str) -> str:
+    """`<tool_call>…` ব্লকগুলো সরিয়ে দেয় (থাকলে উত্তর পড়া যায় না)।"""
+    text = TOOL_CALL_RE.sub("", text or "")
+    return TOOL_XML_TAIL_RE.sub("", text)
+
+
 def strip_ansi(text: str) -> str:
     """`\\x1b[91m` / `[0m` এর মতো কোড মুছে পরিষ্কার লেখা ফেরত দেয়।"""
     return ANSI_RE.sub("", text or "")
@@ -72,7 +89,7 @@ def clean_reply(text: str) -> str:
     """টার্মিনালের আবর্জনা, রিজনিং বক্স আর টুলের সতর্কবার্তা সরিয়ে পরিষ্কার উত্তর।"""
     out: list[str] = []
     in_reasoning = False
-    for raw in strip_ansi(text).splitlines():
+    for raw in strip_ansi(strip_tool_calls(text)).splitlines():
         low = raw.strip().lower()
         if low.startswith("┌─") and "reasoning" in low:
             in_reasoning = True
@@ -89,7 +106,7 @@ def clean_reply(text: str) -> str:
         return cleaned
     # সব লেখা reasoning বক্সে ঢাকা পড়লে (বক্স বন্ধ না হলে) খালি উত্তর না দিয়ে
     # কাঁচা লেখাটাই ফেরত দিই — অসম্পূর্ণ উত্তরও খালি উত্তরের চেয়ে ভালো।
-    salvage = [line for line in strip_ansi(text).splitlines()
+    salvage = [line for line in strip_ansi(strip_tool_calls(text)).splitlines()
                if line.strip() and not any(noise in line.lower() for noise in NOISE_LINES)]
     return "\n".join(salvage).strip()
 

@@ -123,9 +123,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result.ok else 1
 
     if args.free_model_list:
-        from .models import discover_many
+        from .models import discover_usable
 
-        found = discover_many(limit=args.free_model_list)
+        found = discover_usable(
+            limit=args.free_model_list,
+            api_key=(os.environ.get("OPENROUTER_API_KEY") or "").strip(),
+        )
         if found:
             print("\n".join(found))
             return 0

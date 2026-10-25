@@ -471,6 +471,43 @@ class WorkflowFileTest(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
         self.assertIn("display.show_reasoning false", text)
 
+    def test_dead_free_models_are_skipped(self):
+        """তালিকায় থাকলেও মৃত মডেল ("Model unavailable") ব্যবহার হবে না।"""
+        from mesh.models import discover_usable
+
+        alive = {"a/model:free", "c/model:free"}
+        picked = discover_usable(
+            limit=2,
+            tries=5,
+            fetcher=lambda timeout=30: [
+                {"id": "a/model:free", "pricing": {"prompt": "0", "completion": "0"},
+                 "supported_parameters": ["tools"], "context_length": 200_000},
+                {"id": "b/model:free", "pricing": {"prompt": "0", "completion": "0"},
+                 "supported_parameters": ["tools"], "context_length": 190_000},
+                {"id": "c/model:free", "pricing": {"prompt": "0", "completion": "0"},
+                 "supported_parameters": ["tools"], "context_length": 180_000},
+            ],
+            checker=lambda m: m in alive,
+        )
+        self.assertEqual(picked, ["a/model:free", "c/model:free"])
+
+    def test_verified_model_list_passes_key_to_workflow(self):
+        text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
+        block = text.split("Pick free models")[1].split("- name:")[0]
+        self.assertIn("OPENROUTER_API_KEY", block)
+
+    def test_model_unavailable_triggers_fallback(self):
+        from mesh.textutil import looks_like_quota_problem
+
+        self.assertTrue(looks_like_quota_problem("Error: Model unavailable: x/y:free"))
+
+    def test_tool_call_junk_is_not_an_answer(self):
+        from mesh.textutil import clean_reply
+
+        junk = "<tool_call>read<param_key>filePath</param_key><param_value>/a</param_value></tool_call>"
+        self.assertEqual(clean_reply(junk), "")
+        self.assertEqual(clean_reply("আসল উত্তর " + junk), "আসল উত্তর")
+
     def test_only_trusted_people_can_trigger_from_issue_comment(self):
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
         self.assertIn("author_association", text)
@@ -786,7 +823,7 @@ class NetworkIndependenceTest(unittest.TestCase):
         from unittest import mock
         from mesh import cli, models
 
-        with mock.patch.object(models, "discover_many", return_value=["a/x:free", "b/y:free"]), mock.patch(
+        with mock.patch.object(models, "discover_usable", return_value=["a/x:free", "b/y:free"]), mock.patch(
             "builtins.print"
         ) as fake_print:
             self.assertEqual(cli.main(["--free-model-list", "2"]), 0)
@@ -796,7 +833,7 @@ class NetworkIndependenceTest(unittest.TestCase):
         from unittest import mock
         from mesh import cli, models
 
-        with mock.patch.object(models, "discover_many", return_value=[]):
+        with mock.patch.object(models, "discover_usable", return_value=[]):
             self.assertEqual(cli.main(["--free-model-list", "3"]), 1)
 
 

@@ -194,6 +194,9 @@ jobs:
         id: freemodel
         if: steps.guard.outputs.skip != 'true'
         continue-on-error: true
+        # 🧪 শুধু তালিকায় থাকলেই হয় না — ১ টোকেনের ছোট পরীক্ষা দিয়ে দেখে নিই মডেল সত্যিই সাড়া দেয় কি না
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           python -m mesh.cli --free-model-list 3 > free-model.txt 2>/dev/null || true
           i=1
