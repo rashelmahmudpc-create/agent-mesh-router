@@ -1,4 +1,4 @@
 # 🚀 অটো-রান সুইচ
 
-# সময় (UTC): 2026-10-25T11:52:26Z
-# কারণ: সব key যাচাই (OpenRouter/Gemini/Groq/OpenHands/Vercel)
+# সময় (UTC): 2026-10-25T12:00:48Z
+# কারণ: key check এর ভুল ঠিক (ঘোরানো key, UA, Vercel alias) + Hermes provider

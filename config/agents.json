@@ -189,7 +189,7 @@
         "মনে",
         "পরিকল্পনা"
       ],
-      "notes": "আগে প্রমাণিত openrouter/free; ব্যর্থ হলে FREE_M1/M2; শেষে OpenCode এর ফ্রি মডেল",
+      "notes": "শুধু OpenRouter provider (অন্য provider-এ আলাদা key লাগে — সেটা যোগ করা হয়নি)",
       "fallback_commands": [
         [
           "hermes",
@@ -225,9 +225,9 @@
           "-q",
           "{message}",
           "-m",
-          "opencode/deepseek-v4.1-flash-free",
+          "z-ai/glm-5.2",
           "--provider",
-          "opencode",
+          "openrouter",
           "-Q",
           "--yolo",
           "--max-turns",

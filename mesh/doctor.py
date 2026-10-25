@@ -30,6 +30,15 @@ class Check:
     detail: str
 
 
+def _sdk_ready() -> bool:
+    try:
+        from .openhands_cloud import sdk_available
+
+        return sdk_available()
+    except Exception:
+        return False
+
+
 def _mask(value: str) -> str:
     return value[:4] + "…" + value[-2:] if len(value) > 8 else "…"
 
@@ -70,6 +79,18 @@ def run_doctor(
                 checks.append(
                     Check(spec.display(), WARN, f"{binary} ইনস্টল নেই (চালাতে `{binary}` লাগবে)")
                 )
+        elif spec.kind == "openhands_cloud":
+            has_key = bool(env.get("OPENHANDS_API_KEY"))
+            sdk = _sdk_ready()
+            if has_key and sdk:
+                checks.append(Check(spec.display(), OK, "ক্লাউড API key + SDK ঠিক আছে"))
+            else:
+                missing = []
+                if not has_key:
+                    missing.append("OPENHANDS_API_KEY")
+                if not sdk:
+                    missing.append("openhands-sdk")
+                checks.append(Check(spec.display(), WARN, "নেই: " + ", ".join(missing)))
         elif spec.kind == "github_issue":
             has_gh = bool(which("gh"))
             has_token = bool(env.get("GH_TOKEN") or env.get("GITHUB_TOKEN"))

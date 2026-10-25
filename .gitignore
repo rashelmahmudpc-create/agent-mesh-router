@@ -10,3 +10,4 @@ report.md
 .venv/
 .pytest_cache/
 free-model.txt
+keys.md

@@ -972,3 +972,47 @@ class KeyCheckTest(unittest.TestCase):
         text = to_text(check_all({"OPENROUTER_API_KEY": "sk-or-VERYSECRET123"}, opener=opener))
         self.assertNotIn("VERYSECRET", text)
         self.assertIn("OPENROUTER_API_KEY", text)
+
+
+class KeyCheckFixesTest(unittest.TestCase):
+    def test_rotated_key_uses_base_probe(self):
+        from mesh.keycheck import check_key
+
+        def opener(url, headers):
+            self.assertIn("Authorization", headers)
+            return 200, '{"data":{"label":"x","free_tier":true}}'
+
+        result = check_key("OPENROUTER_API_KEY_2", "sk-or-second", opener=opener)
+        self.assertEqual(result.status, "ok")
+
+    def test_user_agent_is_sent(self):
+        from mesh.keycheck import check_key
+
+        seen = {}
+
+        def opener(url, headers):
+            seen.update(headers)
+            return 200, "{}"
+
+        check_key("GROQ_API_KEY", "g", opener=opener)
+        self.assertIn("User-Agent", seen)
+
+    def test_vercel_typo_alias_supported(self):
+        from mesh.keycheck import PROBES
+
+        self.assertIn("VERCEL_AI_GETAWAY", PROBES)
+        self.assertIn("VERCEL_AI_GATEWAY", PROBES)
+
+    def test_base_name(self):
+        from mesh.keycheck import base_name
+
+        self.assertEqual(base_name("OPENROUTER_API_KEY_2"), "OPENROUTER_API_KEY")
+        self.assertEqual(base_name("GEMINI_API_KEY"), "GEMINI_API_KEY")
+
+
+class HermesProviderTest(unittest.TestCase):
+    def test_all_hermes_commands_use_openrouter(self):
+        agent = MeshConfig.load().get("hermes")
+        for cmd in [agent.command, *agent.fallback_commands]:
+            self.assertIn("openrouter", cmd, "শুধু openrouter provider ব্যবহার করতে হবে")
+            self.assertNotIn("opencode", cmd)
