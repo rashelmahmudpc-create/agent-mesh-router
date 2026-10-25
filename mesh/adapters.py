@@ -21,6 +21,10 @@ from .textutil import clean_reply, clip, looks_like_quota_problem, strip_ansi
 # runner(cmd, env, cwd, timeout) -> (exit_code, stdout, stderr)
 Runner = Callable[[list[str], dict[str, str], str, int], tuple[int, str, str]]
 
+# ⏱️ মডেল ধীর হলে (সময় শেষ) অন্তত একটা বিকল্প মডেল চেষ্টা করব — তারপর ছেড়ে দেব।
+# বেশি চেষ্টা করলে অ্যাপের অপেক্ষার সময় (worker MAX_WAIT_MS) শেষ হয়ে যায়।
+MAX_TIMEOUT_TRIES = 2
+
 
 def subprocess_runner(cmd: list[str], env: dict[str, str], cwd: str, timeout: int) -> tuple[int, str, str]:
     try:
@@ -89,6 +93,7 @@ class CliAdapter:
         attempts = self.keystate.order(collect_keys(self.spec.keys, self.environ)) or [("", "")]
 
         last = Reply(self.spec.name, self.spec.display(), False, "কোনো চেষ্টা হয়নি")
+        timeouts = 0
         for template in templates:
             if not template:
                 continue
@@ -105,6 +110,17 @@ class CliAdapter:
                 code, out, err = self.runner(cmd, env, self.workdir, self.timeout)
                 text = strip_ansi(out or err)
                 cleaned = clean_reply(out or "")
+                if code == 124:  # ⏱️ সময় শেষ (কোটা নয়, মডেল ধীর) — অন্য মডেল দেখি
+                    timeouts += 1
+                    tail = " অন্য মডেলে চেষ্টা করছি…" if timeouts < MAX_TIMEOUT_TRIES else " আবার পাঠালে আবার চেষ্টা হবে।"
+                    last = Reply(
+                        self.spec.name, self.spec.display(), False,
+                        f"⏱️ {self.timeout} সেকেন্ডের মধ্যে উত্তর আসেনি।" + tail,
+                        {"code": code, "timeout": True},
+                    )
+                    if timeouts >= MAX_TIMEOUT_TRIES:
+                        return last
+                    break  # এই মডেল ধীর — পরের (fallback) কমান্ড চেষ্টা করি
                 if code == 0 and cleaned:
                     if var:
                         self.keystate.mark_ok(var)

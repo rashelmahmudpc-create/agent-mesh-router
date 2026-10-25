@@ -20,14 +20,18 @@ from . import dailycap
 from .adapters import Reply, build_adapter
 from .chat import Store, default_store
 from .config import AgentSpec, MeshConfig
-from .textutil import clip, find_mentions
+from .textutil import clean_prompt, clip, find_mentions
 
 LogFn = Callable[[str], None]
 
-# চ্যাটে (Issue/অ্যাপ) দ্রুত উত্তর পেতে ছোট নির্দেশ — এজেন্ট যেন রিপো ঘাঁটতে গিয়ে দেরি না করে
+# চ্যাটে (Issue/অ্যাপ) দ্রুত ও প্রাসঙ্গিক উত্তর পেতে ছোট নির্দেশ।
+# ⚠️ কারণ: এই ক্লাইগুলো আসলে কোডিং এজেন্ট — নির্দেশ না দিলে নিজের পরিচয় দেয়,
+# রিপোর তালিকা দেয়, অনুমতি চেয়ে থেমে যায় — স্যারের প্রশ্নের উত্তর দেয় না।
 QUICK_HINT = (
-    "\n\n[সংক্ষিপ্ত নির্দেশ] সংক্ষেপে (৫–১০ লাইন) উত্তর দাও। রিপো ঘাঁটাঘাঁটি বা ভারী টুল চালানোর "
-    "দরকার নেই, যদি না ব্যবহারকারী সত্যিই কোড/ফাইল বদলাতে বলেন।"
+    "\n\n[সংক্ষিপ্ত নির্দেশ — এটা স্যারের অ্যাপের চ্যাট, রিপোতে কাজ করার আদেশ নয়]\n"
+    "স্যারের প্রশ্নের সরাসরি উত্তর দাও, সহজ বাংলায়, ৫–১০ লাইনে। "
+    "নিজের পরিচয় দিও না, রিপোর ফাইল-তালিকা দিও না, \"কী কী করতে পারি\" গোছানো তালিকা দিও না, "
+    "অনুমতি চেয়ে থেমে যেয়ো না। স্যার সত্যিই বদলাতে বললে তখনই কাজে হাত দাও।"
 )
 
 
@@ -161,8 +165,11 @@ class Router:
         return reply
 
     def _quick(self, message: str) -> str:
-        """চ্যাট মোডে ছোট নির্দেশ জুড়ে দিই (রিপো ঘাঁটাঘাঁটি কমিয়ে দ্রুত উত্তর)।"""
-        return f"{message}{QUICK_HINT}" if self.quick else message
+        """চ্যাট মোডে নির্দেশ জুড়ে দিই + কাঁচা মার্কার/@mesh পরিষ্কার করি।"""
+        if not self.quick:
+            return message
+        asked = clean_prompt(message) or message
+        return f"{asked}{QUICK_HINT}"
 
     def direct(self, message: str) -> list[Reply]:
         message = self._quick(message)
@@ -217,17 +224,20 @@ class Router:
         for round_no in range(self.config.settings.max_rounds):
             if not targets:
                 break
-            if round_no == 0 and context:
-                prompt = (
-                    f"{message}\n\n[হলঘরে (Issue) আগে যা হয়েছে]\n{context}\n\n"
-                    "উপরের আলোচনা পড়ে নিজের মত সংক্ষেপে উত্তর দাও।"
-                )
-            elif round_no == 0:
-                prompt = message
+            # 📌 স্যারের নতুন প্রশ্ন সবার শেষে — এজেন্ট যেন পুরনো আলোচনার সারমর্ম না দিয়ে
+            #    ঠিক এই প্রশ্নের উত্তর দেয় (এই উল্টো ক্রমটাই প্রাসঙ্গিকতার মূল চাবি)।
+            if round_no == 0:
+                if context:
+                    prompt = (
+                        f"[হলঘরে (Issue) আগে যা হয়েছে — শুধু পটভূমি, এর সারমর্ম দিও না]\n{context}\n\n"
+                        f"[স্যারের নতুন কথা — শুধু এই প্রশ্নের উত্তর দাও]\n{message}"
+                    )
+                else:
+                    prompt = message
             else:
                 prompt = (
-                    f"{message}\n\n[গ্রুপ চ্যাট পর্যন্ত যা হয়েছে]\n{context}\n\n"
-                    "উপরের আলোচনা পড়ে নিজের মত সংক্ষেপে উত্তর দাও।"
+                    f"[গ্রুপ চ্যাট এখন পর্যন্ত]\n{context}\n\n"
+                    f"[স্যারের নতুন কথা — এটারই উত্তর দাও]\n{message}"
                 )
             self.log(f"— রাউন্ড {round_no + 1}: {', '.join(name for name, _ in targets)}")
             round_replies = self._dispatch(targets, prompt)

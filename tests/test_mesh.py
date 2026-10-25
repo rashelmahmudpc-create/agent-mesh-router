@@ -183,6 +183,78 @@ class FastChatTest(unittest.TestCase):
             self.assertLessEqual(spec.chat_timeout_sec, spec.timeout_sec, name)
 
 
+class PromptHygieneTest(unittest.TestCase):
+    """অ্যাপের কাঁচা comment-এ `@mesh` ডাক আর `<!-- app:… -->` মার্কার থাকে —
+    এজেন্টের কাছে গেলে সে বিভ্রান্ত হয়ে ডাকটাই ফিরিয়ে লেখে (প্রাসঙ্গিকতা নষ্ট হয়)।"""
+
+    def test_app_markers_and_mesh_call_are_stripped(self):
+        runner = FakeRunner()
+        router = make_router(runner, quick=True)
+        router.direct("@mesh আজ কী করবো?\n\n[আগের কথা]\n- স্যার: হাই\n\n<!-- app:123 mode:agent -->")
+        text = " ".join(str(c) for c in runner.calls[0][0])
+        self.assertNotIn("@mesh", text)
+        self.assertNotIn("<!--", text)
+        self.assertIn("আজ কী করবো?", text)
+
+    def test_chat_hint_forbids_intro_repo_tour_and_permission_waiting(self):
+        from mesh.router import QUICK_HINT
+
+        self.assertIn("নিজের পরিচয় দিও না", QUICK_HINT)
+        self.assertIn("রিপোর ফাইল-তালিকা", QUICK_HINT)
+        self.assertIn("অনুমতি চেয়ে থেমে যেয়ো না", QUICK_HINT)
+
+    def test_clean_prompt_keeps_the_real_words(self):
+        from mesh.textutil import clean_prompt
+
+        self.assertEqual(clean_prompt("@mesh হাই স্যার <!-- app:1 -->"), "হাই স্যার")
+        self.assertEqual(clean_prompt("<!-- app:1 mode:agent -->"), "")
+
+    def test_app_mode_marker_is_read(self):
+        from mesh.textutil import app_mode_of
+
+        self.assertEqual(app_mode_of("@mesh হাই\n\n<!-- app:179 mode:agent -->"), "agent")
+        self.assertEqual(app_mode_of("@mesh হাই\n\n<!-- app:179 mode:group -->"), "group")
+        self.assertEqual(app_mode_of("@mesh হাই"), "")  # অ্যাপ নয় → পুরনো আচরণ
+
+
+class TimeoutFallbackTest(unittest.TestCase):
+    """⏱️ ফ্রি মডেল ধীর — ১৫০ সেকেন্ডে উত্তর না এলে আগে '❌ সাড়া দিতে পারিনি' আসত,
+    এখন অন্তত একটা বিকল্প মডেল চেষ্টা করে, তারপর পরিষ্কার বার্তা দেয়।"""
+
+    def _spec(self, with_fallback: bool) -> AgentSpec:
+        return AgentSpec(
+            name="claude",
+            command=["claude", "-p", "{message}"],
+            fallback_commands=[["claude", "-p", "{message}", "--model", "m2"]] if with_fallback else [],
+            timeout_sec=60,
+            chat_timeout_sec=60,
+        )
+
+    def test_timeout_tries_one_alternative_model_then_stops(self):
+        calls = []
+
+        def runner(cmd, env, cwd, timeout):
+            calls.append(timeout)
+            return 124, "", f"সময় শেষ ({timeout}s)"
+
+        reply = CliAdapter(self._spec(True), runner=runner).send("হাই")
+        self.assertFalse(reply.ok)
+        self.assertTrue(reply.meta.get("timeout"))
+        self.assertIn("⏱️", reply.text)
+        self.assertEqual(len(calls), 2)  # মূল মডেল + ১টা fallback, তারপর ছেড়ে দেয়
+
+    def test_timeout_without_fallback_stops_right_away(self):
+        calls = []
+
+        def runner(cmd, env, cwd, timeout):
+            calls.append(timeout)
+            return 124, "", f"সময় শেষ ({timeout}s)"
+
+        reply = CliAdapter(self._spec(False), runner=runner).send("হাই")
+        self.assertFalse(reply.ok)
+        self.assertEqual(len(calls), 1)
+
+
 class GroupModeTest(unittest.TestCase):
     def test_fanout_to_all_chat_agents(self):
         runner = FakeRunner()
@@ -355,6 +427,21 @@ class IssueHallTest(unittest.TestCase):
 
         self.assertEqual(fetch_hall(1, runner=bad), "")
 
+    def test_fetch_hall_drops_failures_and_markers(self):
+        """❌ ব্যর্থ উত্তরের লাইন আর মার্কার পটভূমিতে গেলে এজেন্ট বিভ্রান্ত হয়।"""
+        from mesh.issue import fetch_hall
+
+        payload = {"title": "hall", "body": "", "comments": [
+            {"author": {"login": "github-actions[bot]"},
+             "body": "<!-- mesh:claude -->\n**🟠 Claude Code**\n\n❌ সাড়া দিতে পারিনি\n\nসময় শেষ (150s)"},
+            {"author": {"login": "zayan"}, "body": "@mesh আসল প্রশ্ন <!-- app:1 mode:agent -->"},
+        ]}
+        hall = fetch_hall(3, runner=self._gh_runner(payload))
+        self.assertNotIn("সাড়া দিতে পারিনি", hall)
+        self.assertNotIn("<!--", hall)
+        self.assertNotIn("@mesh", hall)
+        self.assertIn("আসল প্রশ্ন", hall)
+
     def test_post_comment_writes_marker_and_redacts(self):
         from mesh.issue import post_comment
 
@@ -391,6 +478,15 @@ class GroupHistoryTest(unittest.TestCase):
         router.direct("এই bug ঠিক করো")
         joined = " ".join(" ".join(cmd) for cmd, _env in runner.calls)
         self.assertNotIn("আগের কথা", joined)
+
+    def test_new_question_comes_after_the_history(self):
+        """পুরনো আলোচনা আগে, স্যারের নতুন প্রশ্ন সবার শেষে — নইলে এজেন্ট
+        প্রশ্নের উত্তর না দিয়ে আলোচনার সারমর্ম লিখে দেয়।"""
+        runner = FakeRunner()
+        router = make_router(runner)
+        router.group("নতুন প্রশ্ন এটা", history="- @zayan: আগের কথা")
+        text = " ".join(" ".join(cmd) for cmd, _env in runner.calls)
+        self.assertLess(text.index("আগের কথা"), text.index("নতুন প্রশ্ন এটা"))
 
 
 class RedactTest(unittest.TestCase):
@@ -754,7 +850,16 @@ class AutoTriggerTest(unittest.TestCase):
     def test_defaults_work_without_manual_inputs(self):
         text = self._text()
         self.assertIn("inputs.message || github.event.comment.body ||", text)
-        self.assertIn("inputs.mode || 'group'", text)
+        # ইনপুট না এলে মোড নিজেই ঠিক হয়।
+        # workflow-এ মার্কার পড়ার লাইন থাকলে সবচেয়ে ভালো (তখন লগেও দেখা যায়),
+        # না থাকলেও mesh/cli.py নিজে app marker দেখে মোড/পটভূমি ঠিক করে — দুইভাবেই চলে।
+        self.assertTrue(
+            "MODE: ${{ inputs.mode || '' }}" in text or "inputs.mode || 'group'" in text,
+            "মোডের ডিফল্ট ঠিক নেই",
+        )
+        cli_text = (ROOT / "mesh" / "cli.py").read_text(encoding="utf-8")
+        self.assertIn("app_mode_of", cli_text)
+        self.assertIn("--no-hall", cli_text)
 
     def test_guard_skips_when_no_key(self):
         text = self._text()
