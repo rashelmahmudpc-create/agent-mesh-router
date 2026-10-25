@@ -7,3 +7,4 @@ team.txt
 status.md
 report.md
 .venv/
+.pytest_cache/

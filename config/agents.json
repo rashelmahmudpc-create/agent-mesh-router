@@ -92,7 +92,9 @@
       "command": [
         "claude",
         "-p",
-        "{message}"
+        "{message}",
+        "--output-format",
+        "text"
       ],
       "timeout_sec": 900,
       "env": {
@@ -117,8 +119,19 @@
           "claude",
           "-p",
           "{message}",
+          "--output-format",
+          "text",
           "--model",
           "$CLAUDE_FALLBACK_MODEL:-z-ai/glm-5.2:free"
+        ],
+        [
+          "claude",
+          "-p",
+          "{message}",
+          "--output-format",
+          "text",
+          "--model",
+          "$CLAUDE_FALLBACK_MODEL_2:-openrouter/free"
         ]
       ]
     },
@@ -126,7 +139,7 @@
       "name": "hermes",
       "label": "☤ Hermes",
       "kind": "cli",
-      "enabled": false,
+      "enabled": true,
       "roles": [
         "worker",
         "chat",
@@ -136,9 +149,17 @@
         "hermes",
         "chat",
         "-q",
-        "{message}"
+        "{message}",
+        "-m",
+        "$HERMES_MODEL:-openrouter/free",
+        "--provider",
+        "openrouter",
+        "-Q",
+        "--yolo",
+        "--max-turns",
+        "3"
       ],
-      "timeout_sec": 900,
+      "timeout_sec": 600,
       "keys": [
         "OPENROUTER_API_KEY"
       ],
@@ -150,7 +171,23 @@
         "মনে",
         "পরিকল্পনা"
       ],
-      "notes": "⚠️ বন্ধ: ইনস্টল কমান্ড এখনো যাচাই হয়নি (hermes বাইনারি Actions এ নেই)। ইনস্টল করে mesh.yml এ লাইন খুলে enabled=true করুন"
+      "notes": "pip দিয়ে ইনস্টল (hermes-agent 0.19.0)। `-q` = এক প্রশ্ন এক উত্তর, `-Q` = পরিষ্কার আউটপুট। মডেল: HERMES_MODEL (ডিফল্ট openrouter/free)",
+      "fallback_commands": [
+        [
+          "hermes",
+          "chat",
+          "-q",
+          "{message}",
+          "-m",
+          "$HERMES_FALLBACK_MODEL:-z-ai/glm-5.2:free",
+          "--provider",
+          "openrouter",
+          "-Q",
+          "--yolo",
+          "--max-turns",
+          "3"
+        ]
+      ]
     },
     {
       "name": "openhands",
@@ -169,7 +206,7 @@
         "long",
         "বড়"
       ],
-      "notes": "⏸️ বন্ধ রাখা হলো:mention/org যাচাই হয়নি। যাচাই করে চালু করলে Issue হয়ে ওদের ক্লাউডে ফ্রি কাজ করবে"
+      "notes": "⏸️ এখনো বন্ধ — ওদের GitHub App বসালেই চালু হবে। ধাপ: docs/openhands-setup-bn.md (৫ মিনিট)"
     }
   ]
 }
