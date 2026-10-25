@@ -662,3 +662,41 @@ class FreeChainTest(unittest.TestCase):
         self.assertTrue(reply.ok)
         self.assertEqual(reply.text, "দ্বিতীয় মডেলের উত্তর")
         self.assertGreaterEqual(len(calls), 2)
+
+
+class FreeModelDiscoveryTest(unittest.TestCase):
+    def _m(self, mid, price, ctx, tools=True):
+        return {
+            "id": mid,
+            "pricing": {"prompt": price, "completion": price},
+            "context_length": ctx,
+            "supported_parameters": ["tools", "temperature"] if tools else ["temperature"],
+        }
+
+    def test_picks_biggest_free_tool_model(self):
+        from mesh.models import pick_free_model
+
+        models = [
+            self._m("paid/big", "0.000003", 1_000_000),
+            self._m("free/small", "0", 32_000),
+            self._m("free/good", "0", 262_000),
+            self._m("free/bigger-no-tools", "0", 900_000, tools=False),
+        ]
+        self.assertEqual(pick_free_model(models), "free/good")
+
+    def test_returns_none_when_nothing_qualifies(self):
+        from mesh.models import pick_free_model
+
+        self.assertIsNone(pick_free_model([self._m("paid/x", "0.000002", 500_000)]))
+        self.assertIsNone(pick_free_model([]))
+
+    def test_price_zero_variants(self):
+        from mesh.models import pick_free_model
+
+        models = [self._m("free/a", "0.0", 100_000), self._m("free/b", "0.000000", 100_000)]
+        self.assertIn(pick_free_model(models), {"free/a", "free/b"})
+
+    def test_cli_handles_no_network(self):
+        from mesh import cli
+
+        self.assertEqual(cli.main(["--free-model"]), 1)

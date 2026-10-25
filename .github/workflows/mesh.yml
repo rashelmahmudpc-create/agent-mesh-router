@@ -142,6 +142,22 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY" || true
 
+      - name: Pick a free model (প্রতিটা রানে তাজা তালিকা দেখে)
+        id: freemodel
+        if: steps.guard.outputs.skip != 'true'
+        continue-on-error: true
+        run: |
+          MODEL=$(python -m mesh.cli --free-model 2>/dev/null || true)
+          if [ -n "$MODEL" ]; then
+            echo "✅ আজকের ফ্রি মডেল: \`$MODEL\`" >> "$GITHUB_STEP_SUMMARY"
+            # ব্যবহারকারী নিজে Variable দিয়ে ঠিক করে না দিলে অটো-বাছাই ব্যবহার হবে
+            if [ -z "${HERMES_MODEL:-}" ]; then echo "HERMES_MODEL=$MODEL" >> "$GITHUB_ENV"; fi
+            if [ -z "${CLAUDE_MODEL:-}" ]; then echo "CLAUDE_MODEL=$MODEL" >> "$GITHUB_ENV"; fi
+            if [ -z "${OPENCODE_FALLBACK_MODEL:-}" ]; then echo "OPENCODE_FALLBACK_MODEL=$MODEL" >> "$GITHUB_ENV"; fi
+          else
+            echo "⚠️ ফ্রি মডেল পাওয়া যায়নি — ডিফল্ট চেইন ব্যবহার হবে" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Show team
         if: steps.guard.outputs.skip != 'true'
         continue-on-error: true
