@@ -112,19 +112,26 @@ async function emitText(send, text, agent) {
 /* ---------------- এন্ডপয়েন্ট ---------------- */
 
 async function handleHealth(env) {
-  if (!env.GITHUB_TOKEN || !env.MESH_REPO || !env.MESH_ISSUE) {
-    return { ok: false, error: "Worker env ঠিক নেই (GITHUB_TOKEN / MESH_REPO / MESH_ISSUE)" };
+  // ⚡ দ্রুত লেনের জন্য GitHub token জরুরি নয় — তাই health শুধু repo/issue দেখে।
+  //    (token ছাড়া উত্তর Issue-এ জমা হবে না, কিন্তু চ্যাট চলবে)
+  if (!env.MESH_REPO || !env.MESH_ISSUE) {
+    return { ok: false, error: "Worker env ঠিক নেই (MESH_REPO / MESH_ISSUE)" };
   }
-  const res = await gh(env, issuePath(env));
-  if (!res.ok) return { ok: false, error: `GitHub: HTTP ${res.status}` };
-  return {
+  const out = {
     ok: true,
     repo: env.MESH_REPO,
     issue: Number(env.MESH_ISSUE),
-    title: res.data?.title || "",
+    title: "",
     fast: fastReady(env),
     providers: fastProviders(env),
+    github: Boolean(env.GITHUB_TOKEN),
   };
+  if (env.GITHUB_TOKEN) {
+    const res = await gh(env, issuePath(env));
+    if (res.ok) out.title = res.data?.title || "";
+    else out.github = false;
+  }
+  return out;
 }
 
 function handleAgents() {
