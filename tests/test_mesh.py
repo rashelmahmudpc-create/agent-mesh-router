@@ -705,10 +705,25 @@ class FreeModelDiscoveryTest(unittest.TestCase):
         models = [self._m("free/a", "0.0", 100_000), self._m("free/b", "0.000000", 100_000)]
         self.assertIn(pick_free_model(models), {"free/a", "free/b"})
 
-    def test_cli_handles_no_network(self):
+    def test_cli_reports_when_no_free_model(self):
+        """নেটওয়ার্ক থাকুক বা না থাকুক — টেস্টটা যেন নির্ভরযোগ্য হয়।"""
+        from unittest import mock
         from mesh import cli
+        from mesh import models
 
-        self.assertEqual(cli.main(["--free-model"]), 1)
+        with mock.patch.object(models, "discover", return_value=None):
+            self.assertEqual(cli.main(["--free-model"]), 1)
+
+    def test_cli_prints_discovered_model(self):
+        from unittest import mock
+        from mesh import cli
+        from mesh import models
+
+        with mock.patch.object(models, "discover", return_value="some/model:free"), mock.patch(
+            "builtins.print"
+        ) as fake_print:
+            self.assertEqual(cli.main(["--free-model"]), 0)
+            fake_print.assert_called_with("some/model:free")
 
 
 class WorkflowShellHygieneTest(unittest.TestCase):
@@ -721,3 +736,24 @@ class WorkflowShellHygieneTest(unittest.TestCase):
 
     def test_free_model_file_is_ignored(self):
         self.assertIn("free-model.txt", (ROOT / ".gitignore").read_text(encoding="utf-8"))
+
+
+class NetworkIndependenceTest(unittest.TestCase):
+    """নেটওয়ার্ক আছে বা নেই — টেস্ট সবসময় একই ফল দেবে।"""
+
+    def test_free_model_list_is_mocked(self):
+        from unittest import mock
+        from mesh import cli, models
+
+        with mock.patch.object(models, "discover_many", return_value=["a/x:free", "b/y:free"]), mock.patch(
+            "builtins.print"
+        ) as fake_print:
+            self.assertEqual(cli.main(["--free-model-list", "2"]), 0)
+            fake_print.assert_called_with("a/x:free\nb/y:free")
+
+    def test_free_model_list_empty_is_failure(self):
+        from unittest import mock
+        from mesh import cli, models
+
+        with mock.patch.object(models, "discover_many", return_value=[]):
+            self.assertEqual(cli.main(["--free-model-list", "3"]), 1)
