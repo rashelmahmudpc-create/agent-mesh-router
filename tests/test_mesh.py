@@ -467,6 +467,10 @@ class WorkflowFileTest(unittest.TestCase):
             self.assertGreaterEqual(turns, 6)
             self.assertIn("openrouter", " ".join(cmd))
 
+    def test_hermes_reasoning_box_is_turned_off_in_ci(self):
+        text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
+        self.assertIn("display.show_reasoning false", text)
+
     def test_only_trusted_people_can_trigger_from_issue_comment(self):
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
         self.assertIn("author_association", text)
@@ -847,6 +851,35 @@ class OpenHandsCloudTest(unittest.TestCase):
         result = ask("হাই", api_key="k", sdk_factory=lambda *a: (lambda m: "   "))
         self.assertFalse(result.ok)
         self.assertEqual(result.detail, "empty")
+
+    def test_only_team_allowed_models_are_used(self):
+        """ওদের টিমে শুধু deepseek-*-flash চলে — plus দিলে 'not allowed to access model'।"""
+        from mesh.openhands_cloud import DEFAULT_MODEL, MODEL_CANDIDATES
+
+        self.assertNotIn("plus", DEFAULT_MODEL)
+        self.assertIn(DEFAULT_MODEL, MODEL_CANDIDATES)
+
+    def test_denied_model_falls_back_to_next_one(self):
+        from mesh.openhands_cloud import ask
+
+        tried = []
+
+        def factory(key, url, model):
+            tried.append(model)
+
+            def run(message):
+                if "plus" in model:
+                    raise RuntimeError(
+                        "team not allowed to access model. This team can only access models=['deepseek-v4.1-flash']"
+                    )
+                return "ঠিক আছি"
+
+            return run
+
+        result = ask("হাই", api_key="k", sdk_factory=factory, model="openhands/deepseek-v4.1-plus")
+        self.assertTrue(result.ok)
+        self.assertEqual(result.text, "ঠিক আছি")
+        self.assertGreaterEqual(len(tried), 2)
 
 
 class KeyStateTest(unittest.TestCase):

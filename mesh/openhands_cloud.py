@@ -15,7 +15,10 @@ import os
 from dataclasses import dataclass
 
 DEFAULT_URL = "https://app.all-hands.dev"
-DEFAULT_MODEL = "openhands/deepseek-v4.1-plus"
+# 🖐️ ওদের ফ্রি টিমে শুধু এই মডেলগুলো চলে (plus লাগালে "team not allowed to access model" আসে)
+DEFAULT_MODEL = "openhands/deepseek-v4.1-flash"
+MODEL_CANDIDATES = ("openhands/deepseek-v4.1-flash", "openhands/deepseek-v4-flash")
+MODEL_DENIED_MARKERS = ("not allowed to access model", "can only access models")
 
 
 @dataclass
@@ -63,16 +66,29 @@ def ask(
             )
         sdk_factory = _default_factory
 
-    try:
-        run = sdk_factory(api_key, cloud_url, model)
-        text = run(message)
-    except Exception as exc:  # noqa: BLE001 — আসল কারণটাই ফেরত দিই
-        return CloudResult(False, f"❌ OpenHands ক্লাউডে সমস্যা: {type(exc).__name__}: {exc}", "error")
+    # মডেলটা এই টিমের জন্য অনুমোদিত না হলে ("not allowed to access model") পরেরটা চেষ্টা করি
+    candidates = [model] + [m for m in MODEL_CANDIDATES if m != model]
+    last_error: Exception | None = None
+    for candidate in candidates:
+        try:
+            run = sdk_factory(api_key, cloud_url, candidate)
+            text = run(message)
+        except Exception as exc:  # noqa: BLE001 — আসল কারণটাই ফেরত দিই
+            last_error = exc
+            if any(marker in str(exc).lower() for marker in MODEL_DENIED_MARKERS):
+                continue  # এই মডেল চলবে না — পরের অনুমোদিত মডেল
+            return CloudResult(False, f"❌ OpenHands ক্লাউডে সমস্যা: {type(exc).__name__}: {exc}", "error")
 
-    text = (text or "").strip()
-    if not text:
-        return CloudResult(False, "❌ OpenHands উত্তর দিল না (খালি আউটপুট)", "empty")
-    return CloudResult(True, text)
+        text = (text or "").strip()
+        if not text:
+            return CloudResult(False, "❌ OpenHands উত্তর দিল না (খালি আউটপুট)", "empty")
+        return CloudResult(True, text)
+
+    return CloudResult(
+        False,
+        f"❌ OpenHands ক্লাউডে সমস্যা: {type(last_error).__name__}: {last_error}",
+        "error",
+    )
 
 
 def _default_factory(api_key: str, cloud_url: str, model: str):
