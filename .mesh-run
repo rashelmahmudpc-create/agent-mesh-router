@@ -1,4 +1,4 @@
 # 🚀 অটো-রান সুইচ
 
-# সময় (UTC): 2026-10-25T15:55:00Z
-# কারণ: Cloudflare ডিপ্লয়ে এখন মাত্র ১টা secret (Account ID নিজেই খুঁজে নেয়)
+# সময় (UTC): 2026-10-25T16:10:00Z
+# কারণ: Cloudflare ডিপ্লয় এখন স্যারের আগের secret (ADMISSIONSKY_CLOUDFLARE_API_KEY) নিজেই খুঁজে নেয়

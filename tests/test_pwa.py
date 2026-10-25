@@ -203,7 +203,7 @@ class FastLaneTest(unittest.TestCase):
     def test_deploy_workflow_skips_without_secrets(self):
         wf = (ROOT / ".github" / "workflows" / "worker.yml").read_text(encoding="utf-8")
         self.assertIn("CF_API_TOKEN", wf)
-        self.assertIn("skip=true", wf)  # secret না থাকলে চুপচাপ বাদ
+        self.assertIn("found=false", wf)  # secret না থাকলে চুপচাপ বাদ
         self.assertIn("wrangler-action", wf)
 
 
@@ -214,13 +214,22 @@ class AutoDeployTest(unittest.TestCase):
         self.wf = (ROOT / ".github" / "workflows" / "worker.yml").read_text(encoding="utf-8")
         self.app = (APP / "index.html").read_text(encoding="utf-8")
 
-    def test_only_one_secret_is_mandatory(self):
-        """শুধু CF_API_TOKEN — Account ID নিজেই খুঁজে নেয়।"""
-        self.assertIn("CF_API_TOKEN", self.wf)
+    def test_existing_cloudflare_secret_is_reused(self):
+        """স্যারের আগের `ADMISSIONSKY_CLOUDFLARE_API_KEY` secret-ই যেন ব্যবহার হয়।"""
+        self.assertIn("ADMISSIONSKY_CLOUDFLARE_API_KEY", self.wf)
         self.assertIn("client/v4/accounts", self.wf)  # account id discovery
         self.assertIn("steps.account.outputs.id", self.wf)
-        # secret না থাকলে চুপচাপ বাদ
-        self.assertIn("skip=true", self.wf)
+        # টোকেন না থাকলে চুপচাপ বাদ
+        self.assertIn("found=false", self.wf)
+
+    def test_token_is_masked_and_verified(self):
+        self.assertIn("::add-mask::", self.wf)          # লগে ছাপা হবে না
+        self.assertIn("/user/tokens/verify", self.wf)   # আসলেই কাজ করে কি না
+        self.assertIn("steps.verify.outputs.ok", self.wf)
+
+    def test_any_common_secret_name_works(self):
+        for name in ("CF_API_TOKEN", "CLOUDFLARE_API_KEY", "CLOUDFLARE_API_TOKEN", "CF_API_KEY"):
+            self.assertIn(f"secrets.{name}", self.wf, f"{name} চেনে না")
 
     def test_provider_keys_are_pushed_to_the_worker(self):
         for name in ("OPENROUTER_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY"):
