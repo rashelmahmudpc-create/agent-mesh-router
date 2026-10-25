@@ -55,6 +55,7 @@ class CliAdapter:
         environ: dict[str, str] | None = None,
         reply_limit: int = 4000,
         keystate: KeyState | None = None,
+        timeout: int | None = None,
     ) -> None:
         self.spec = spec
         self.runner = runner or subprocess_runner
@@ -63,6 +64,7 @@ class CliAdapter:
         self.environ = environ if environ is not None else dict(os.environ)
         self.reply_limit = reply_limit
         self.keystate = keystate or default_state()
+        self.timeout = timeout or spec.timeout_sec
 
     def _cmd(self, message: str, template: list[str] | None = None) -> list[str]:
         out = []
@@ -100,7 +102,7 @@ class CliAdapter:
                         self.spec.name, self.spec.display(), True,
                         f"[dry-run] {' '.join(cmd)}", {"dry_run": True},
                     )
-                code, out, err = self.runner(cmd, env, self.workdir, self.spec.timeout_sec)
+                code, out, err = self.runner(cmd, env, self.workdir, self.timeout)
                 text = strip_ansi(out or err)
                 cleaned = clean_reply(out or "")
                 if code == 0 and cleaned:
@@ -201,11 +203,13 @@ def build_adapter(
     issue: int | None = None,
     environ: dict[str, str] | None = None,
     reply_limit: int = 4000,
+    timeout: int | None = None,
 ):
     if spec.kind == "openhands_cloud":
         return OpenHandsCloudAdapter(spec, dry_run=dry_run, environ=environ, reply_limit=reply_limit)
     if spec.kind == "github_issue":
         return GitHubIssueAdapter(spec, runner=runner, workdir=workdir, dry_run=dry_run, issue=issue, environ=environ)
     return CliAdapter(
-        spec, runner=runner, workdir=workdir, dry_run=dry_run, environ=environ, reply_limit=reply_limit
+        spec, runner=runner, workdir=workdir, dry_run=dry_run, environ=environ,
+        reply_limit=reply_limit, timeout=timeout,
     )
