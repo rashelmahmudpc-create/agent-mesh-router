@@ -4,7 +4,7 @@ A multi-agent orchestration framework for routing tasks across specialized agent
 
 ## 🧠 Shared Brain
 
-সব এজেন্টের জন্য একটাই নির্দেশনা-ফাইল: **[`AGENTS.md`](AGENTS.md)** (ZAYAN GLOBAL BRAIN v1.0)।
+সব এজেন্টের জন্য একটাই নির্দেশনা-ফাইল: **[`AGENTS.md`](AGENTS.md)** (ZAYAN GLOBAL BRAIN v1.1)।
 
 | এজেন্ট | কোথা থেকে পড়ে |
 |---|---|
@@ -27,13 +27,19 @@ A multi-agent orchestration framework for routing tasks across specialized agent
 # ১) টিমে কারা আছে দেখুন
 python3 -m mesh.cli --list
 
-# ২) নিজে একবার পরীক্ষা করুন — কিছুই চালাবে না, শুধু দেখাবে
+# ২) স্বাস্থ্য পরীক্ষা — কী ইনস্টল আছে, কোন key আছে
+python3 -m mesh.cli --doctor
+
+# ৩) কে সাড়া দেয়? (প্রতিটা এজেন্টকে এক লাইনের প্রশ্ন)
+python3 -m mesh.cli --probe --dry-run
+
+# ৪) নিজে একবার পরীক্ষা করুন — কিছুই চালাবে না, শুধু দেখাবে
 python3 -m mesh.cli "হাই সবাই" --mode group --dry-run
 
-# ৩) কাজ ভাগ করে দিন (একজনকে)
+# ৫) কাজ ভাগ করে দিন (একজনকে)
 python3 -m mesh.cli "এই bug টা ঠিক করো" --mode direct
 
-# ৪) গ্রুপ চ্যাট (সবাই উত্তর দেয়, কেউ কাউকে @mention করতে পারে)
+# ৬) গ্রুপ চ্যাট (সবাই উত্তর দেয়, কেউ কাউকে @mention করতে পারে)
 python3 -m mesh.cli "হাই" --mode group
 ```
 
@@ -97,6 +103,21 @@ XAI_API_KEY             # (ঐচ্ছিক) রিভিউয়ার / দ
 
 ---
 
+## 🛠️ কমান্ড এক নজরে
+
+| কমান্ড | কাজ |
+|---|---|
+| `python3 -m mesh.cli --list` | টিমে কারা আছে |
+| `python3 -m mesh.cli --doctor` | 🩺 কী ইনস্টল, কোন key আছে, কী নেই |
+| `python3 -m mesh.cli --probe` | 🔎 প্রতিটা এজেন্টকে ছোট প্রশ্ন — কে সাড়া দেয় |
+| `python3 -m mesh.cli "..." --mode direct` | 🎯 কাজ ভাগ করে দেওয়া |
+| `python3 -m mesh.cli "..." --mode group` | 👥 সবাই একসাথে |
+| `--dry-run` | কিছুই চালাবে না, শুধু দেখাবে |
+| `--issue N` | ওই Issue-কে হলঘর বানিয়ে উত্তর comment করবে |
+| `--json` | মেশিন-পাঠ্য আউটপুট |
+
+`--doctor` এর ফল: ✅ ঠিক · ⚠️ সতর্কতা (এজেন্ট ইনস্টল নেই) · ❌ সমস্যা (key নেই)।
+
 ## 🗂️ ফোল্ডার
 
 ```
@@ -105,8 +126,10 @@ mesh/router.py          # 🧠 ম্যানেজার: direct + group, স�
 mesh/adapters.py        # এজেন্টের সাথে কথা বলার সেতু (cli / github_issue)
 mesh/keys.py            # key ঘোরানো
 mesh/chat.py            # চ্যাটের লগ (.mesh/transcript.jsonl)
-tests/                  # ১৮টা পরীক্ষা — key ছাড়াই চলে
-.github/workflows/      # ব্রেইন যেখানে চলে
+mesh/doctor.py          # 🩺 স্বাস্থ্য পরীক্ষা
+tests/                  # ২৭টা পরীক্ষা — key ছাড়াই চলে
+docs/handoffs/          # 📮 কাজের হ্যান্ডঅফ
+.github/workflows/      # ব্রেইন যেখানে চলে (mesh.yml) + পরীক্ষা (ci.yml)
 ```
 
 ## ✅ পরীক্ষা

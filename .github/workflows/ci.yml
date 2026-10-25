@@ -1,0 +1,38 @@
+name: ci
+
+# 🧪 প্রতিটা push/PR এ: টেস্ট, ডক্টর, গ্রুপ ড্রাই-রান
+# key বা ইন্টারনেট ছাড়াই চলে — শুধু কোড ঠিক আছে কি না দেখে।
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Doctor (health check)
+        run: python3 -m mesh.cli --doctor || true
+
+      - name: Team list
+        run: python3 -m mesh.cli --list
+
+      - name: Dry-run group chat
+        run: python3 -m mesh.cli "হাই সবাই" --mode group --dry-run
+
+      - name: Dry-run direct mode
+        run: python3 -m mesh.cli "এই bug টা ঠিক করো" --mode direct --dry-run

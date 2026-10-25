@@ -47,14 +47,25 @@ jobs:
           python-version: "3.11"
 
       # ⚠️ এজেন্টের CLI গুলো ইনস্টল — একটা ব্যর্থ হলেও বাকিগুলো চলবে
+      # Node 22 দরকার (Claude Code এর শর্ত)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+        continue-on-error: true
+
       - name: Install agent CLIs
         continue-on-error: true
         run: |
-          npm install -g @opencode/cli || true
-          npm install -g cline || true
-          # Claude Code / Hermes চাইলে নিচের লাইনগুলো চালু করুন:
-          # npm install -g @anthropic-ai/claude-code || true
-          # curl -fsSL https://hermes-agent.nousresearch.com/install.sh | sh || true
+          npm install -g @opencode/cli || true   # বাইনারি: opencode
+          npm install -g cline || true           # বাইনারি: cline
+          npm install -g @anthropic-ai/claude-code || true  # বাইনারি: claude
+          # ☤ Hermes: অফিশিয়াল ডক (hermes-agent.nousresearch.com/docs) থেকে
+          # ইনস্টল কমান্ড দেখে নিচে বসান, তারপর কমেন্ট খুলুন:
+          # curl -fsSL <official-install-url> | sh || true
+
+      - name: Doctor (কে সাড়া দেবে?)
+        continue-on-error: true
+        run: python3 -m mesh.cli --doctor
 
       - name: Show team
         run: python -m mesh.cli --list
@@ -73,8 +84,8 @@ jobs:
         run: |
           set -euo pipefail
           args=(--mode "$MODE")
-          [ -n "$ISSUE" ] && args+=(--issue "$ISSUE")
-          [ "$DRY" = "true" ] && args+=(--dry-run)
+          if [ -n "$ISSUE" ]; then args+=(--issue "$ISSUE"); fi
+          if [ "$DRY" = "true" ]; then args+=(--dry-run); fi
           python -m mesh.cli "$MSG" "${args[@]}" | tee mesh-output.txt
 
       - name: Keep the log

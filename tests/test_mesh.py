@@ -191,3 +191,42 @@ class StoreTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DoctorTest(unittest.TestCase):
+    def _checks(self, environ=None, which=None):
+        from mesh.doctor import run_doctor
+
+        config = MeshConfig.load()
+        store_path = Path(tempfile.mkdtemp()) / "t.jsonl"
+        return {
+            c.item: c
+            for c in run_doctor(
+                config,
+                environ=environ or {},
+                which=which or (lambda name: None),
+                store_path=store_path,
+            )
+        }
+
+    def test_missing_cli_is_warning_not_failure(self):
+        checks = self._checks()
+        self.assertEqual(checks["🧑‍💻 OpenCode"].status, "warn")
+        self.assertIn("ইনস্টল নেই", checks["🧑‍💻 OpenCode"].detail)
+
+    def test_missing_key_is_failure(self):
+        checks = self._checks()
+        self.assertEqual(checks["claude keys"].status, "fail")
+
+    def test_key_and_binary_found(self):
+        checks = self._checks(
+            environ={"OPENROUTER_API_KEY": "sk-or-secret", "OPENROUTER_API_KEY_2": "sk-or-two"},
+            which=lambda name: "/usr/bin/" + name,
+        )
+        self.assertEqual(checks["claude keys"].status, "ok")
+        self.assertIn("2টা", checks["claude keys"].detail)
+        self.assertNotIn("sk-or-secret", checks["claude keys"].detail)  # key লুকানো থাকে
+        self.assertEqual(checks["🧑‍💻 OpenCode"].status, "ok")
+
+    def test_store_is_writable(self):
+        self.assertEqual(self._checks()["store"].status, "ok")
