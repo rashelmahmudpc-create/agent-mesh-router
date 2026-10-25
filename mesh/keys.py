@@ -40,7 +40,13 @@ def expand_env_value(value: str, environ: dict[str, str] | None = None) -> str:
     if not value.startswith("$"):
         return value
 
-    expr = value[1:]
-    name, _, default = expr.partition(":-")
-    resolved = (env.get(name) or "").strip()
-    return resolved or default
+    # nested ভাবেও চলবে: "$A:-$B" — সর্বোচ্চ ৩ ধাপ
+    for _ in range(3):
+        if not value.startswith("$"):
+            break
+        name, _, default = value[1:].partition(":-")
+        resolved = (env.get(name) or "").strip() or default
+        if resolved == value:
+            break
+        value = resolved
+    return value

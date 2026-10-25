@@ -640,6 +640,12 @@ class FreeChainTest(unittest.TestCase):
         self.assertTrue(looks_like_quota_problem(
             "HTTP 404: This model is unavailable for free. The paid version is available now"))
 
+    def test_nested_default_expansion(self):
+        from mesh.keys import expand_env_value
+
+        self.assertEqual(expand_env_value("$A:-$B", {"B": "from-b"}), "from-b")
+        self.assertEqual(expand_env_value("$A:-$B", {"A": "top"}), "top")
+
     def test_agents_have_multi_step_free_chain(self):
         config = MeshConfig.load()
         for name in ("hermes", "claude"):
@@ -651,14 +657,17 @@ class FreeChainTest(unittest.TestCase):
 
         def runner(cmd, env, cwd, timeout):
             calls.append(cmd)
-            if "minimax/minimax-m3:free" in cmd:
+            if "free/second" in cmd:
                 return 0, "দ্বিতীয় মডেলের উত্তর", ""
             return 1, "", "404 This model is unavailable for free"
 
         agent = MeshConfig.load().get("hermes")
         from mesh.adapters import CliAdapter
 
-        reply = CliAdapter(agent, runner=runner, environ={"OPENROUTER_API_KEY": "k"}).send("হাই")
+        reply = CliAdapter(
+            agent, runner=runner,
+            environ={"OPENROUTER_API_KEY": "k", "FREE_M1": "free/first", "FREE_M2": "free/second"},
+        ).send("হাই")
         self.assertTrue(reply.ok)
         self.assertEqual(reply.text, "দ্বিতীয় মডেলের উত্তর")
         self.assertGreaterEqual(len(calls), 2)
