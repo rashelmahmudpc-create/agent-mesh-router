@@ -112,14 +112,51 @@ def _default_factory(api_key: str, cloud_url: str, model: str):
 
 
 def _last_text(conversation) -> str:
-    """conversation থেকে শেষ সহায়ক উত্তরটা বের করার চেষ্টা (SDK সংস্করণভেদে ভিন্ন)।"""
+    """conversation থেকে শেষ সহায়ক উত্তরটা বের করা (SDK সংস্করণভেদে ভিন্ন)।"""
+    # ১) আসল পথ: conversation.state.events (বা _state.events) → শেষ agent message
+    for holder in (getattr(conversation, "state", None), getattr(conversation, "_state", None)):
+        events = getattr(holder, "events", None) if holder is not None else None
+        if events is None:
+            continue
+        try:
+            for event in reversed(list(events)):
+                text = _event_text(event)
+                if text:
+                    return text
+        except Exception:  # noqa: BLE001 — কোনো এক সংস্করণে events অন্যভাবে আসে
+            pass
+
+    # ২) পুরনো/সরল attr
     for attr in ("last_response", "final_response", "response"):
         value = getattr(conversation, attr, None)
         if isinstance(value, str) and value.strip():
             return value
-    events = getattr(conversation, "events", None) or []
-    for event in reversed(list(events)):
-        text = getattr(event, "content", None) or getattr(event, "message", None)
-        if isinstance(text, str) and text.strip():
+    for event in reversed(list(getattr(conversation, "events", None) or [])):
+        text = _event_text(event)
+        if text:
             return text
-    return str(conversation)
+    # ৩) শেষ চেষ্টা: object-এর repr কখনোই উত্তর নয় — খালি ফেরত দিই
+    return ""
+
+
+def _event_text(event) -> str:
+    """একটা event থেকে লেখা বের করা (শুধু agent/assistant এর কথা)।"""
+    source = getattr(event, "source", None)
+    if source is not None and str(source).lower() not in ("agent", "assistant"):
+        return ""
+    name = type(event).__name__.lower()
+    if "action" in name or "observation" in name or "error" in name:
+        return ""
+    message = getattr(event, "llm_message", None) or getattr(event, "message", None)
+    content = getattr(message, "content", None) if message is not None else getattr(event, "content", None)
+    if isinstance(content, str):
+        return content.strip()
+    parts: list[str] = []
+    for block in content or []:
+        if isinstance(block, str):
+            parts.append(block)
+            continue
+        text = getattr(block, "text", None)
+        if isinstance(text, str):
+            parts.append(text)
+    return "\n".join(p for p in parts if p.strip()).strip()

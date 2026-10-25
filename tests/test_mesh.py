@@ -852,6 +852,24 @@ class OpenHandsCloudTest(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.detail, "empty")
 
+    def test_answer_is_read_from_state_events(self):
+        """SDK-র RemoteConversation থেকে আসল উত্তর বের করা (object repr নয়)।"""
+        from types import SimpleNamespace as NS
+
+        from mesh.openhands_cloud import _last_text
+
+        events = [
+            NS(source="user", llm_message=NS(content=[NS(text="প্রশ্ন")])),
+            NS(source="agent", llm_message=NS(content=[NS(text="হ্যাঁ, কাজ করছি")])),
+        ]
+        self.assertEqual(_last_text(NS(state=NS(events=events))), "হ্যাঁ, কাজ করছি")
+        self.assertEqual(_last_text(NS(_state=NS(events=events))), "হ্যাঁ, কাজ করছি")
+
+    def test_no_answer_is_empty_not_object_repr(self):
+        from mesh.openhands_cloud import _last_text
+
+        self.assertEqual(_last_text(object()), "")
+
     def test_only_team_allowed_models_are_used(self):
         """ওদের টিমে শুধু deepseek-*-flash চলে — plus দিলে 'not allowed to access model'।"""
         from mesh.openhands_cloud import DEFAULT_MODEL, MODEL_CANDIDATES
