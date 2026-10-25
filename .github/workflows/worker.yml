@@ -139,6 +139,17 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY" || true
 
+      - name: রিপোর্ট আপলোড (দেখার জন্য)
+        if: always()
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: cf-token-report
+          path: |
+            report.txt
+            accounts.json
+          if-no-files-found: ignore
+
       - name: Account ID ঠিক করো
         id: account
         if: steps.token.outputs.found == 'true' && steps.verify.outputs.ok == 'true'
