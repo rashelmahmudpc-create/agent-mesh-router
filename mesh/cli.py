@@ -84,6 +84,10 @@ def main(argv: list[str] | None = None) -> int:
         "--free-model", action="store_true", help="এখন কোন মডেল সত্যিই ফ্রি — OpenRouter তালিকা থেকে বলে দাও"
     )
     parser.add_argument(
+        "--check-keys", action="store_true",
+        help="🔑 কোন key সত্যিই কাজ করছে দেখাও (key কখনো ছাপা হয় না)",
+    )
+    parser.add_argument(
         "--openhands", metavar="TEXT", default=None,
         help="🖐️ OpenHands ক্লাউড API দিয়ে একবার কাজ চালাও (OPENHANDS_API_KEY লাগবে)",
     )
@@ -102,6 +106,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.list:
         _print_list(config)
+        return 0
+
+    if args.check_keys:
+        from .keycheck import check_all, to_json, to_text
+
+        results = check_all(dict(os.environ))
+        print(to_json(results) if args.json else to_text(results))
         return 0
 
     if args.openhands:

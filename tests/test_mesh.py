@@ -482,8 +482,9 @@ class CommandEnvTest(unittest.TestCase):
         # যাচাই করা এজেন্ট চালু
         for name in ("opencode", "claude", "hermes"):
             self.assertIn(name, active)
-        # যাচাই হয়নি (OpenHands org/mention) — বন্ধ
-        self.assertNotIn("openhands", active)
+        # key আছে — OpenHands এখন সক্রিয় (কিন্তু গ্রুপ চ্যাটে নয়)
+        self.assertIn("openhands", active)
+        self.assertNotIn("openhands", [a.name for a in config.chat_agents()])
 
 
 class DoctorHonestyTest(unittest.TestCase):
@@ -492,7 +493,7 @@ class DoctorHonestyTest(unittest.TestCase):
 
         checks = run_doctor(
             MeshConfig.load(),
-            environ={"GH_TOKEN": "x", "OPENROUTER_API_KEY": "sk-or-test"},
+            environ={"GH_TOKEN": "x", "OPENROUTER_API_KEY": "sk-or-test", "OPENHANDS_API_KEY": "oh-test"},
             which=lambda n: "/bin/" + n,
             store_path=Path(tempfile.mkdtemp()) / "t.jsonl",
         )
@@ -500,7 +501,8 @@ class DoctorHonestyTest(unittest.TestCase):
         fails = [c.item for c in checks if c.status == "fail"]
         self.assertEqual(fails, [])
         by_item = {c.item: c for c in checks}
-        self.assertEqual(by_item["🖐️ OpenHands"].status, "warn")
+        # OpenHands এখন চালু; key/env অনুযায়ী হয় ok, নাহয় warn (fail নয়)
+        self.assertIn(by_item["🖐️ OpenHands"].status, ("ok", "warn"))
 
 
 class AnsiAndFallbackTest(unittest.TestCase):
@@ -897,3 +899,76 @@ class OpenHandsAdapterTest(unittest.TestCase):
         reply = build_adapter(spec, environ={}).send("হাই")
         self.assertFalse(reply.ok)
         self.assertIn("OPENHANDS_API_KEY", reply.text)
+
+
+class KeyCheckTest(unittest.TestCase):
+    def _opener(self, responses):
+        calls = []
+
+        def opener(url, headers):
+            calls.append((url, dict(headers)))
+            for needle, resp in responses.items():
+                if needle in url:
+                    return resp
+            return 404, ""
+
+        opener.calls = calls
+        return opener
+
+    def test_valid_openrouter_key(self):
+        from mesh.keycheck import check_key
+
+        opener = self._opener({"openrouter.ai": (200, '{"data":{"label":"sk-or-...","usage":1.5,"limit":10,"is_free_tier":true}}')})
+        result = check_key("OPENROUTER_API_KEY", "sk-or-secret", opener=opener)
+        self.assertEqual(result.status, "ok")
+        self.assertIn("free_tier=True", result.detail)
+        self.assertNotIn("sk-or-secret", result.detail)
+
+    def test_invalid_key_is_bad(self):
+        from mesh.keycheck import check_key
+
+        result = check_key("OPENROUTER_API_KEY", "bad", opener=self._opener({"openrouter.ai": (401, "")}))
+        self.assertEqual(result.status, "bad")
+
+    def test_quota_is_warning_not_bad(self):
+        from mesh.keycheck import check_key
+
+        result = check_key("GROQ_API_KEY", "g", opener=self._opener({"groq.com": (429, "")}))
+        self.assertEqual(result.status, "warn")
+
+    def test_gemini_uses_query_param(self):
+        from mesh.keycheck import check_key
+
+        opener = self._opener({"generativelanguage": (200, '{"models":[1,2,3]}')})
+        result = check_key("GEMINI_API_KEY", "AIza-test", opener=opener)
+        self.assertEqual(result.status, "ok")
+        self.assertIn("models=3", result.detail)
+        self.assertIn("?key=", opener.calls[0][0])
+
+    def test_missing_key(self):
+        from mesh.keycheck import check_key
+
+        self.assertEqual(check_key("GEMINI_API_KEY", "", opener=self._opener({})).status, "bad")
+
+    def test_manual_and_out_of_scope(self):
+        from mesh.keycheck import check_key
+
+        self.assertEqual(check_key("OPENHANDS_API_KEY", "x", opener=self._opener({})).status, "manual")
+        self.assertEqual(check_key("CARTESIA_API_KEY", "x", opener=self._opener({})).status, "warn")
+
+    def test_rotated_keys_are_checked(self):
+        from mesh.keycheck import check_all
+
+        opener = self._opener({"openrouter.ai": (200, '{"data":{"label":"x"}}')})
+        results = check_all({"OPENROUTER_API_KEY": "a", "OPENROUTER_API_KEY_2": "b"}, opener=opener)
+        names = [r.name for r in results]
+        self.assertIn("OPENROUTER_API_KEY", names)
+        self.assertIn("OPENROUTER_API_KEY_2", names)
+
+    def test_table_never_leaks_values(self):
+        from mesh.keycheck import check_all, to_text
+
+        opener = self._opener({"openrouter.ai": (200, '{"data":{}}')})
+        text = to_text(check_all({"OPENROUTER_API_KEY": "sk-or-VERYSECRET123"}, opener=opener))
+        self.assertNotIn("VERYSECRET", text)
+        self.assertIn("OPENROUTER_API_KEY", text)

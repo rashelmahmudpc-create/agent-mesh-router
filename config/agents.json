@@ -63,7 +63,9 @@
       "command": [
         "cline",
         "-P",
-        "openrouter",
+        "cline",
+        "-k",
+        "$CLINE_API_KEY",
         "-y",
         "{message}"
       ],
@@ -81,7 +83,10 @@
       "env": {
         "OPENROUTER_API_KEY": "$OPENROUTER_API_KEY"
       },
-      "priority": 5
+      "priority": 5,
+      "keys": [
+        "CLINE_API_KEY"
+      ]
     },
     {
       "name": "claude",
@@ -235,7 +240,7 @@
       "name": "openhands",
       "label": "🖐️ OpenHands",
       "kind": "openhands_cloud",
-      "enabled": false,
+      "enabled": true,
       "roles": [
         "worker",
         "cloud"
@@ -248,7 +253,7 @@
         "long",
         "বড়"
       ],
-      "notes": "ওদের ক্লাউড API (সবচেয়ে আগে ডাকা হবে)। OPENHANDS_API_KEY দিলেই সক্রিয় — python3 -m mesh.cli --openhands 'কাজ' দিয়ে একবার পরীক্ষাও করা যায়",
+      "notes": "ওদের ক্লাউড API (priority 1, শুধু নির্দিষ্ট কাজে ডাকা হয় — গ্রুপ চ্যাটে নয়)। OPENHANDS_API_KEY আছে; SDK ইনস্টল হলে সক্রিয়",
       "priority": 1,
       "keys": [
         "OPENHANDS_API_KEY"
