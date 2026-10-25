@@ -148,6 +148,41 @@ class StreamingReplyTest(unittest.TestCase):
         self.assertTrue(any(r.ok for r in replies))
 
 
+class FastChatTest(unittest.TestCase):
+    """চ্যাটে (Issue/অ্যাপ) দ্রুত উত্তর: কম সময়সীমা + ছোট নির্দেশ।"""
+
+    def test_chat_timeout_is_shorter(self):
+        spec = AgentSpec(name="x", command=["x", "{message}"], timeout_sec=900, chat_timeout_sec=150)
+        self.assertEqual(spec.timeout_for(quick=True), 150)
+        self.assertEqual(spec.timeout_for(quick=False), 900)
+
+    def test_chat_timeout_never_exceeds_full_timeout(self):
+        spec = AgentSpec(name="x", command=["x", "{message}"], timeout_sec=120, chat_timeout_sec=600)
+        self.assertEqual(spec.timeout_for(quick=True), 120)
+
+    def test_quick_mode_adds_short_hint(self):
+        runner = FakeRunner()
+        router = make_router(runner, quick=True)
+        router.direct("এই bug টা ঠিক করো")
+        text = " ".join(str(c) for c in runner.calls[0][0])
+        self.assertIn("সংক্ষিপ্ত নির্দেশ", text)
+
+    def test_normal_mode_has_no_hint(self):
+        runner = FakeRunner()
+        router = make_router(runner)
+        router.direct("এই bug টা ঠিক করো")
+        text = " ".join(str(c) for c in runner.calls[0][0])
+        self.assertNotIn("সংক্ষিপ্ত নির্দেশ", text)
+
+    def test_config_has_chat_timeouts(self):
+        config = MeshConfig.load(ROOT / "config" / "agents.json")
+        for name in ("opencode", "claude", "hermes"):
+            spec = config.get(name)
+            self.assertIsNotNone(spec, name)
+            self.assertTrue(spec.chat_timeout_sec, f"{name}: chat_timeout_sec নেই")
+            self.assertLessEqual(spec.chat_timeout_sec, spec.timeout_sec, name)
+
+
 class GroupModeTest(unittest.TestCase):
     def test_fanout_to_all_chat_agents(self):
         runner = FakeRunner()

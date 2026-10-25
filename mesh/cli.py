@@ -166,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
         store=default_store(),
         log=None if args.json else (lambda msg: print(msg, file=sys.stderr)),
         on_reply=_post_reply if args.issue else None,
+        quick=bool(args.issue),
     )
 
     history = fetch_hall(args.issue) if (args.issue and args.mode == "group") else ""

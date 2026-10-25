@@ -20,6 +20,7 @@ class AgentSpec:
     command: list[str] = field(default_factory=list)
     fallback_commands: list[list[str]] = field(default_factory=list)
     timeout_sec: int = 900
+    chat_timeout_sec: int | None = None  # চ্যাটে (Issue/অ্যাপ) দ্রুত উত্তর — কম সময়সীমা
     env: dict[str, str] = field(default_factory=dict)
     keys: list[str] = field(default_factory=list)
     keywords: list[str] = field(default_factory=list)
@@ -30,6 +31,12 @@ class AgentSpec:
 
     def has_role(self, role: str) -> bool:
         return role in self.roles
+
+    def timeout_for(self, quick: bool = False) -> int:
+        """চ্যাটে (quick) হলে `chat_timeout_sec`, নইলে পুরো `timeout_sec`।"""
+        if quick and self.chat_timeout_sec:
+            return min(int(self.chat_timeout_sec), int(self.timeout_sec))
+        return int(self.timeout_sec)
 
     def display(self) -> str:
         return self.label or self.name

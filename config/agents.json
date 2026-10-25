@@ -27,6 +27,7 @@
         "{message}"
       ],
       "timeout_sec": 900,
+      "chat_timeout_sec": 150,
       "keywords": [
         "code",
         "fix",
@@ -105,6 +106,7 @@
         "text"
       ],
       "timeout_sec": 900,
+      "chat_timeout_sec": 150,
       "env": {
         "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
         "ANTHROPIC_AUTH_TOKEN": "$OPENROUTER_API_KEY",
@@ -178,6 +180,7 @@
         "6"
       ],
       "timeout_sec": 600,
+      "chat_timeout_sec": 120,
       "keys": [
         "OPENROUTER_API_KEY"
       ],

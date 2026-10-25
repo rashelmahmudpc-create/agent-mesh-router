@@ -24,6 +24,12 @@ from .textutil import clip, find_mentions
 
 LogFn = Callable[[str], None]
 
+# চ্যাটে (Issue/অ্যাপ) দ্রুত উত্তর পেতে ছোট নির্দেশ — এজেন্ট যেন রিপো ঘাঁটতে গিয়ে দেরি না করে
+QUICK_HINT = (
+    "\n\n[সংক্ষিপ্ত নির্দেশ] সংক্ষেপে (৫–১০ লাইন) উত্তর দাও। রিপো ঘাঁটাঘাঁটি বা ভারী টুল চালানোর "
+    "দরকার নেই, যদি না ব্যবহারকারী সত্যিই কোড/ফাইল বদলাতে বলেন।"
+)
+
 
 class Router:
     def __init__(
@@ -37,6 +43,7 @@ class Router:
         environ: dict[str, str] | None = None,
         log: LogFn | None = None,
         on_reply: Callable[["Reply"], None] | None = None,
+        quick: bool = False,
     ) -> None:
         self.config = config
         self.runner = runner
@@ -48,6 +55,8 @@ class Router:
         self.log = log or (lambda _msg: None)
         # উত্তর তৈরি হওয়ামাত্রই ডাকবে (Issue-এ সাথে সাথে comment যাবে → অ্যাপে দ্রুত দেখা যাবে)
         self.on_reply = on_reply
+        # চ্যাট (Issue/অ্যাপ থেকে ডাকা): সংক্ষিপ্ত উত্তর + কম সময়সীমা → দ্রুত ফল
+        self.quick = quick
 
         self.calls = 0
         self.pair_calls: dict[tuple[str, str], int] = {}
@@ -95,6 +104,7 @@ class Router:
             issue=self.issue,
             environ=self.environ,
             reply_limit=self.config.settings.reply_char_limit,
+            timeout=spec.timeout_for(self.quick),
         )
         self.log(f"→ {spec.display()} কে পাঠানো হচ্ছে")
         reply = adapter.send(message, sender)
@@ -150,7 +160,12 @@ class Router:
                 self.log(f"⚠️ reply পাঠাতে সমস্যা: {err}")
         return reply
 
+    def _quick(self, message: str) -> str:
+        """চ্যাট মোডে ছোট নির্দেশ জুড়ে দিই (রিপো ঘাঁটাঘাঁটি কমিয়ে দ্রুত উত্তর)।"""
+        return f"{message}{QUICK_HINT}" if self.quick else message
+
     def direct(self, message: str) -> list[Reply]:
+        message = self._quick(message)
         out: list[Reply] = []
         for name in self.classify(message):
             reply = self._emit(self.call(name, message, "owner"))
@@ -193,6 +208,7 @@ class Router:
 
     def group(self, message: str, history: str = "") -> list[Reply]:
         """সবাইকে ডাকা হয়; `history` হলে (Issue এর পুরনো কথা) সেটাও পড়ে।"""
+        message = self._quick(message)
         targets: list[tuple[str, str]] = [(spec.name, "owner") for spec in self.config.chat_agents()]
         known = self.config.names()
         collected: list[Reply] = []
