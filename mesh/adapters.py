@@ -15,7 +15,7 @@ from typing import Callable
 
 from .config import AgentSpec
 from .keys import collect_keys, expand_env_value
-from .textutil import clip, looks_like_quota_problem, strip_ansi
+from .textutil import clean_reply, clip, looks_like_quota_problem, strip_ansi
 
 # runner(cmd, env, cwd, timeout) -> (exit_code, stdout, stderr)
 Runner = Callable[[list[str], dict[str, str], str, int], tuple[int, str, str]]
@@ -99,8 +99,9 @@ class CliAdapter:
                     )
                 code, out, err = self.runner(cmd, env, self.workdir, self.spec.timeout_sec)
                 text = strip_ansi(out or err)
-                if code == 0 and (out or "").strip():
-                    reply_text = clip(strip_ansi(out), self.reply_limit)
+                cleaned = clean_reply(out or "")
+                if code == 0 and cleaned:
+                    reply_text = clip(cleaned, self.reply_limit)
                     return Reply(self.spec.name, self.spec.display(), True, reply_text, {"key": var or None})
                 if code == 0:
                     last = Reply(

@@ -55,6 +55,34 @@ def strip_ansi(text: str) -> str:
     return ANSI_RE.sub("", text or "")
 
 
+# Hermes/অন্য টুলের অপ্রয়োজনীয় লাইন — Issue এ না আসাই ভালো
+NOISE_LINES = (
+    "security scanner enabled but not available",
+    "command scanning will use pattern matching only",
+)
+
+REASONING_START = ("┌─ reasoning", "┌─ Reasoning".lower())
+
+
+def clean_reply(text: str) -> str:
+    """টার্মিনালের আবর্জনা, রিজনিং বক্স আর টুলের সতর্কবার্তা সরিয়ে পরিষ্কার উত্তর।"""
+    out: list[str] = []
+    in_reasoning = False
+    for raw in strip_ansi(text).splitlines():
+        low = raw.strip().lower()
+        if low.startswith("┌─") and "reasoning" in low:
+            in_reasoning = True
+            continue
+        if in_reasoning:
+            if low.startswith("└"):
+                in_reasoning = False
+            continue
+        if any(noise in low for noise in NOISE_LINES):
+            continue
+        out.append(raw)
+    return "\n".join(out).strip()
+
+
 def clip(text: str, limit: int) -> str:
     """লম্বা উত্তর কেটে ছোট করে, শেষে ... বসায়।"""
     text = (text or "").strip()
