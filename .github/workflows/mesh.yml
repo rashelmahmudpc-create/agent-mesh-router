@@ -3,6 +3,14 @@ name: agent-mesh
 # 🧠 ব্রেইন এখানেই (GitHub Actions) — ম্যানেজার কোড এই রিপোতে থাকে।
 # 📌 Issue এ `@mesh <কথা>` লিখলেই গ্রুপ চ্যাট শুরু; উত্তরগুলো ওই Issue-তেই comment হয়ে ফিরে আসে।
 on:
+  # 🚀 সবচেয়ে সহজ: `.mesh-run` ফাইলটা বদলালেই নিজে থেকে চলে (কোনো ক্লিক লাগে না)
+  push:
+    branches: [main]
+    paths:
+      - ".mesh-run"
+  # ⏰ নিজে থেকে প্রতি ৬ ঘণ্টায়
+  schedule:
+    - cron: "17 */6 * * *"
   workflow_dispatch:
     inputs:
       message:
@@ -38,6 +46,8 @@ jobs:
     # 🔒 পাবলিক রিপো: শুধু মালিক/সদস্য/কোলাবরেটরই ডাকতে পারবে — নইলে যে কেউ এসে API কোটা খরচ করে দেবে।
     if: >
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
       (github.event_name == 'issue_comment'
         && contains(github.event.comment.body, '@mesh')
         && github.event.comment.user.type != 'Bot'
@@ -70,7 +80,20 @@ jobs:
           # ইনস্টল কমান্ড দেখে নিচে বসান, তারপর কমেন্ট খুলুন:
           # curl -fsSL <official-install-url> | sh || true
 
+      - name: Guard (key ছাড়া অটো-রান হবে না)
+        id: guard
+        env:
+          K1: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$K1" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "${{ github.event_name }}" != "issue_comment" ]; then
+            echo "⏭️ কোনো OpenRouter key নেই — অটো-রান বাদ দেওয়া হলো (খরচ বাঁচাতে)।"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Secret check (মান ছাপে না — শুধু আছে/নেই)
+        if: steps.guard.outputs.skip != 'true'
         continue-on-error: true
         env:
           K1: ${{ secrets.OPENROUTER_API_KEY }}
@@ -92,6 +115,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Doctor (কে সাড়া দেবে?)
+        if: steps.guard.outputs.skip != 'true'
         continue-on-error: true
         # 🔍 ডক্টরকে একই secret গুলো দিতে হবে, নইলে ভুল করে "key নেই" বলে
         env:
@@ -112,10 +136,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Show team
+        if: steps.guard.outputs.skip != 'true'
         continue-on-error: true
         run: python -m mesh.cli --list | tee team.txt
 
       - name: Route message
+        if: steps.guard.outputs.skip != 'true'
         id: route
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -125,10 +151,10 @@ jobs:
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           OPENCODE_MODEL: ${{ vars.OPENCODE_MODEL }}
-          MSG: ${{ github.event_name == 'workflow_dispatch' && inputs.message || github.event.comment.body }}
-          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'group' }}
+          MSG: ${{ inputs.message || github.event.comment.body || 'সবাই, এক লাইনে নিজের অবস্থা জানাও' }}
+          MODE: ${{ inputs.mode || 'group' }}
           ISSUE: ${{ github.event.issue.number || '' }}
-          DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+          DRY: ${{ inputs.dry_run || false }}
         run: |
           set -uo pipefail
           args=(--mode "$MODE")
@@ -147,7 +173,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Publish status to an Issue (পড়া যায় এমন লগ)
-        if: always()
+        if: always() && steps.guard.outputs.skip != 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

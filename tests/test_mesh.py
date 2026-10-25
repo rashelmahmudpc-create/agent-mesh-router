@@ -572,3 +572,32 @@ class AnsiAndFallbackTest(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
         doctor_block = text.split("- name: Doctor")[1].split("- name:")[0]
         self.assertIn("OPENROUTER_API_KEY", doctor_block)
+
+
+class AutoTriggerTest(unittest.TestCase):
+    """ব্যবহারকারীকে ক্লিক করতে না হয় — অটো ট্রিগার ঠিক আছে কি না।"""
+
+    def _text(self):
+        return (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
+
+    def test_push_marker_triggers(self):
+        text = self._text()
+        self.assertIn('".mesh-run"', text)
+        self.assertIn("paths:", text)
+
+    def test_schedule_triggers(self):
+        self.assertIn("schedule:", self._text())
+        self.assertIn("cron:", self._text())
+
+    def test_defaults_work_without_manual_inputs(self):
+        text = self._text()
+        self.assertIn("inputs.message || github.event.comment.body ||", text)
+        self.assertIn("inputs.mode || 'group'", text)
+
+    def test_guard_skips_when_no_key(self):
+        text = self._text()
+        self.assertIn("steps.guard.outputs.skip", text)
+        self.assertIn("খরচ বাঁচাতে", text)
+
+    def test_marker_file_exists(self):
+        self.assertTrue((ROOT / ".mesh-run").exists())
