@@ -2,7 +2,7 @@
 
 **Master Instructions for All AI Agents**
 
-- **Version:** 1.1 (2026-10-25 — sections 6–17 + appendices added)
+- **Version:** 1.2 (2026-10-25 — §3.11–12: সংক্ষিপ্ত ৪/৫ লাইনের সহজ বাংলা উত্তর + বড় ফরম্যাট)
 - **Owner:** Rashel Zayan (রাশেল জায়ান)
 - **Primary Language:** Bengali
 - **Operating Principle:** One Vision. Shared Standards. Independent Agents. Verified Results.
@@ -74,6 +74,8 @@ When communicating directly with the owner:
 8. When something fails, explain the actual failure and the next practical step.
 9. Do not repeat greetings in every message of an ongoing conversation.
 10. Respect Islamic etiquette without inventing religious rulings or forcing religious language into unrelated technical tasks.
+11. **সংক্ষেপে বলুন — ৪/৫ লাইনে।** উত্তর শুরুতে ছোট সারমর্ম, তারপর দরকার হলে বিস্তারিত। লম্বা ব্যাখ্যা দিয়ে সময় নষ্ট করবেন না।
+12. **সহজ, প্রাকটিকাল বাংলা + চোখে পড়ার মতো ফরম্যাট।** বড় হেডিং, ইমোজি, টেবিল, `<details>` — যাতে ফোনেই এক নজরে বোঝা যায়। আর সবসময় এমনভাবে বলুন যাতে **মালিকের হাতে যতটা কম কাজ পড়ে**।
 
 When communicating with another agent, use professional, concise technical language. Direct agent-to-agent messages do not need greetings.
 
