@@ -957,6 +957,25 @@ class OpenHandsCloudTest(unittest.TestCase):
 
         self.assertEqual(_last_text(NS(state=NS(events=[ActionEvent()]))), "🔵 OpenHands — প্রস্তুত, স্যার")
 
+    def test_finish_answer_beats_intermediate_chatter(self):
+        """মাঝপথের "I'll start by exploring…" নয় — শেষ finish বার্তাই উত্তর।"""
+
+        class Chatter:
+            source = "agent"
+            llm_message = type("M", (), {"content": [type("B", (), {"text": "I'll start by exploring"})()]})()
+
+        class ActionEvent:
+            source = "agent"
+            tool_name = "finish"
+            action = type("A", (), {"message": "🔵 OpenHands — প্রস্তুত"})()
+
+        from types import SimpleNamespace as NS
+
+        from mesh.openhands_cloud import _last_text
+
+        events = [Chatter(), ActionEvent()]
+        self.assertEqual(_last_text(NS(state=NS(events=events))), "🔵 OpenHands — প্রস্তুত")
+
     def test_no_answer_is_empty_not_object_repr(self):
         from mesh.openhands_cloud import _last_text
 
