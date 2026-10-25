@@ -259,6 +259,27 @@ class AutoDeployTest(unittest.TestCase):
         self.assertIn("schedule:", self.wf)
         self.assertIn("cron:", self.wf)
 
+    def test_worker_hides_raw_model_details(self):
+        """স্ক্রিনশটের বাগ: অ্যাপে `groq, openrouter, gemini` জাতীয় raw তথ্য দেখাচ্ছিল।"""
+        worker = (ROOT / "worker" / "index.js").read_text(encoding="utf-8")
+        block = worker.split("async function handleFastChat")[1].split("async function")[0]
+        self.assertNotIn("input: providers.join", block)
+        self.assertIn("উত্তর তৈরি হচ্ছে", block)
+
+    def test_agent_mode_answers_with_one_agent(self):
+        worker = (ROOT / "worker" / "index.js").read_text(encoding="utf-8")
+        self.assertIn("function pickPersona", worker)
+        self.assertIn("if (mode === \"group\") return PERSONAS.slice()", worker)
+        self.assertIn("const single = mode !== \"group\"", worker)
+
+    def test_thinking_is_stripped_from_answers(self):
+        """মডেলের "Analyze the Request / Attempt 1" জাতীয় ভেতরের কথা বাদ যাবে।"""
+        worker = (ROOT / "worker" / "index.js").read_text(encoding="utf-8")
+        self.assertIn("function cleanAnswer", worker)
+        self.assertIn("const out = cleanAnswer(provider.parse(data))", worker)
+        self.assertIn("reasoning: { exclude: true }", worker)      # OpenRouter
+        self.assertIn("thinkingBudget: 0", worker)                  # Gemini
+
     def test_app_reads_the_url_by_itself(self):
         self.assertIn("server.json", self.app)
         # নিজে বেছে নিলে (github/fast) ছোঁবে না, নইলে Worker আগে

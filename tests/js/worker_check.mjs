@@ -137,6 +137,7 @@ check("খালি লেখা → 400", res.status === 400);
 
 const realFetch = globalThis.fetch;
 const llmCalls = [];
+let llmContent = ""; // খালি হলে ডিফল্ট উত্তর
 
 globalThis.fetch = async (url, init = {}) => {
   const u = String(url);
@@ -147,7 +148,8 @@ globalThis.fetch = async (url, init = {}) => {
   if (u.includes("openrouter.ai") || u.includes("groq.com")) {
     llmCalls.push({ url: u, init });
     const model = JSON.parse(init.body).model;
-    return reply({ choices: [{ message: { content: `উত্তর (${model}) — স্যার, কাজ চলছে ✅` } }] });
+    const content = llmContent || `উত্তর (${model}) — স্যার, কাজ চলছে ✅`;
+    return reply({ choices: [{ message: { content } }] });
   }
   if (u.includes("generativelanguage.googleapis.com")) {
     llmCalls.push({ url: u, init });
@@ -206,6 +208,35 @@ check("⚡ comment-এ key ফাঁস হয়নি", !/or-test|gq-test|gm-t
 {
   const { ms } = await fastChat({ mode: "agent", message: "কী করবো?" });
   check("⚡ agent মোডেও দ্রুত", ms < 8000, `${ms}ms`);
+}
+
+{
+  // 👤 agent মোডে একজনেরই উত্তর (সবাই নয়)
+  llmContent = "";
+  const { evs } = await fastChat({ mode: "agent", message: "কোডে বাগ হচ্ছে, ঠিক করো" });
+  const agentMsgs = evs.filter((e) => e.type === "agent_message");
+  const finals = evs.filter((e) => e.type === "final");
+  check("👤 agent মোডে agent_message নেই", agentMsgs.length === 0, `${agentMsgs.length}টা`);
+  check("👤 agent মোডে একটাই final", finals.length === 1, `${finals.length}টা`);
+}
+
+{
+  // 🧹 মডেলের ভেতরের "Analyze the Request / Attempt" বাদ যায়
+  llmContent = [
+    "1. Analyze the Request:",
+    "- User: \"হাই\"",
+    "- Language: Bengali",
+    "3. Drafting the Response (Internal Monologue/Trial):",
+    "Attempt 1: হাই! আমি Claude Code",
+    "",
+    "সারমর্ম:",
+    "হ্যালো স্যার, আমি প্রস্তুত — বলুন কী দরকার।",
+  ].join("\n");
+  const { evs } = await fastChat({ mode: "agent", message: "হাই" });
+  const final = evs.find((e) => e.type === "final")?.text || "";
+  check("🧹 বিশ্লেষণ/ধাপ বাদ পড়েছে", !/Analyze the Request|Attempt 1|Internal Monologue/i.test(final), final.slice(0, 60));
+  check("🧹 আসল উত্তর ঠিক আছে", final.includes("হ্যালো স্যার"), final.slice(0, 60));
+  llmContent = "";
 }
 
 {
