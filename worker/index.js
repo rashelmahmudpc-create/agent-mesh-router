@@ -219,9 +219,12 @@ function sse(env, run) {
  */
 
 const FAST_RULES = [
-  "তুমি বাংলায় উত্তর দাও — সহজ, কাজের, স্যার সম্বোধন করে।",
-  "সর্বোচ্চ ৪–৫ লাইন। আগে সারমর্ম, তারপর দরকার হলে ছোট বুলেট।",
-  "যা জানো না তা বানিও না; দরকার হলে এক লাইনে বলে দাও কী তথ্য লাগবে।",
+  "তুমি সহজ বাংলায় উত্তর দাও, স্যার সম্বোধন করে।",
+  "প্রথম বাক্যেই সরাসরি উত্তর — ব্যবহারকারী যা জিজ্ঞেস করেছে তার উত্তর।",
+  "কখনো নিজের বিশ্লেষণ, পরিকল্পনা, ধাপ বা চিন্তা লিখবে না — শুধু চূড়ান্ত উত্তর দেবে।",
+  "প্রশ্ন ছোট হলে উত্তরও ছোট (১–২ লাইন)। সর্বোচ্চ ৪–৫ লাইন।",
+  "কোনো মেনু, সম্ভাব্য কাজের তালিকা বা \"আমি কী কী করতে পারি\" জাতীয় কথা দিও না — শুধু যা জিজ্ঞেস করা হয়েছে।",
+  "যা জানো না তা বানিও না; দরকার হলে এক লাইনে বলো কী তথ্য লাগবে।",
   "কোনো secret, key বা পাসওয়ার্ড কখনো লিখো না।",
 ].join(" ");
 
@@ -261,7 +264,7 @@ const PROVIDERS = {
       model,
       messages: [{ role: "system", content: system }, { role: "user", content: user }],
       max_tokens: 400,
-      temperature: 0.4,
+      temperature: 0.3,
     }),
     parse: (d) => d?.choices?.[0]?.message?.content,
   },
@@ -288,7 +291,8 @@ const PROVIDERS = {
       model,
       messages: [{ role: "system", content: system }, { role: "user", content: user }],
       max_tokens: 400,
-      temperature: 0.4,
+      temperature: 0.3,
+      reasoning: { exclude: true }, // 🧠 ভেতরের চিন্তা ফেরত দিও না
     }),
     parse: (d) => d?.choices?.[0]?.message?.content,
   },
@@ -304,7 +308,11 @@ const PROVIDERS = {
     body: (env, model, system, user) => ({
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: "user", parts: [{ text: user }] }],
-      generationConfig: { maxOutputTokens: 400, temperature: 0.4 },
+      generationConfig: {
+        maxOutputTokens: 400,
+        temperature: 0.3,
+        thinkingConfig: { thinkingBudget: 0 }, // 🧠 চিন্তা বন্ধ
+      },
     }),
     parse: (d) => (d?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join(""),
   },
@@ -318,6 +326,53 @@ function fastProviders(env) {
 /** ⚡ দ্রুত লেন চালু? (key থাকলে + FAST=off না হলে) */
 function fastReady(env) {
   return String(env.FAST || "").toLowerCase() !== "off" && fastProviders(env).length > 0;
+}
+
+// 🧹 মডেলের "Analize the Request / Attempt 1 / Constraint" জাতীয় ভেতরের কথা বাদ দিই
+const META_PREFIX = /^\s*(?:[\d]+[.)]\s*)?(?:analy[sz]e|analysis|constraints?|constraint check|drafting|draft|attempt\s*\d|internal monologue|monologue|let me|hmm\b|thinking|reasoning|step\s*\d|plan\b|understanding|user\s*:|language\s*:|tone\/style|tone\s*:|length\s*:|structure\s*:|goal\s*:|task\s*:|বিশ্লেষণ|পরিকল্পনা|চিন্তা)\b/i;
+const ANSWER_MARKERS = /^(?:সারমর্ম|উত্তর|সংক্ষেপে|এক কথায়|আসসালামু|হ্যালো|হাই|স্যার)/;
+
+function cleanAnswer(text) {
+  let out = String(text || "")
+    .replace(/<\s*(?:thinking|analysis|reasoning)[\s\S]*?<\s*\/\s*(?:thinking|analysis|reasoning)\s*>/gi, "")
+    .replace(/^\s*(?:analysis|reasoning|thinking)\s*:\s*/gim, "");
+  const lines = out.split("\n");
+  // প্রথমে যেখানে আসল উত্তর শুরু ("সারমর্ম"/সালাম), সেখান থেকে রাখি
+  const start = lines.findIndex((l) => ANSWER_MARKERS.test(l.trim()));
+  let kept = (start > 0 ? lines.slice(start) : lines)
+    .filter((line) => {
+      const t = line.trim();
+      if (!t) return true;
+      if (META_PREFIX.test(t) && !ANSWER_MARKERS.test(t)) return false;
+      return true;
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  // কিছু না থাকলে শেষ অনুচ্ছেদটাই দিই
+  if (kept.length < 12) {
+    const paras = String(text || "").split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean);
+    const last = paras[paras.length - 1] || "";
+    const cleaned = last.split("\n").filter((l) => !META_PREFIX.test(l.trim())).join("\n").trim();
+    kept = cleaned || String(text || "").trim();
+  }
+  return kept.slice(0, 1600);
+}
+
+/** 🤖 কোন এজেন্ট উত্তর দেবে — agent মোডে একজনই */
+function pickPersona(message, mode) {
+  if (mode === "group") return PERSONAS.slice();
+  const low = String(message || "").toLowerCase();
+  const rules = [
+    ["hermes", ["মনে", "মেমরি", "নোট", "note", "remember", "memory", "plan", "পরিকল্পনা", " checklist"]],
+    ["claude", ["আর্কিটেকচার", "architecture", "review", "রিভিউ", "ডিজাইন", "design", "কেন", "why", "তুলনা", "compare"]],
+    ["openhands", ["রিপো", "repo", "pr", "issue", "ফাইল", "file", "বড়", "big", "ডিপ্লয়", "deploy", "প্রজেক্ট"]],
+    ["opencode", ["কোড", "code", "বাগ", "bug", "error", "এরর", "ফিক্স", "fix", "টেস্ট", "test", "ইনস্টল", "install"]],
+  ];
+  for (const [id, words] of rules) {
+    if (words.some((w) => low.includes(w))) return [PERSONAS.find((p) => p.id === id)];
+  }
+  return [PERSONAS.find((p) => p.id === "opencode")]; // ডিফল্ট
 }
 
 function personaAgent(persona) {
@@ -362,7 +417,7 @@ async function askModel(env, persona, message) {
           failures.push(`${name}/${model}: HTTP ${res.status}${why ? ` · ${why}` : ""}`);
           continue; // পরের মডেল
         }
-        const out = String(provider.parse(data) || "").trim();
+        const out = cleanAnswer(provider.parse(data));
         if (!out) {
           failures.push(`${name}/${model}: খালি উত্তর`);
           continue;
@@ -395,7 +450,7 @@ async function postAnswers(env, rows) {
   return { posted };
 }
 
-/** ⚡ মূল দ্রুত পথ — চার এজেন্ট সমান্তরালে, যে আগে শেষ হয় তার উত্তর আগে */
+/** ⚡ মূল দ্রুত পথ — agent মোডে একজন, group মোডে সবাই (সমান্তরালে) */
 async function handleFastChat(env, ctx, payload) {
   const text = String(payload?.message || "").trim();
   const mode = payload?.mode === "group" ? "group" : "agent";
@@ -403,29 +458,41 @@ async function handleFastChat(env, ctx, payload) {
     .map((f) => f?.name)
     .filter(Boolean);
   const question = `${text}${names.length ? `\n\n📎 সংযুক্ত ফাইল: ${names.join(", ")}` : ""}`;
+  const picked = pickPersona(text, mode);
   const startedAt = Date.now();
 
   return sse(env, async (send) => {
     const providers = fastProviders(env);
-    send({ type: "status", text: `⚡ দ্রুত লেন — ${PERSONAS.length} এজেন্ট একসাথে (${providers.join(", ")})` });
-    send({ type: "tool", id: "fast", name: "দ্রুত লেন", input: providers.join(", "), state: "running" });
+    // 👤 agent মোডে একজনই উত্তর দেয়, 👥 group মোডে সবাই
+    send({
+      type: "status",
+      text: mode === "group" ? "⚡ সবাইকে জিজ্ঞেস করছি…" : "⚡ উত্তর তৈরি হচ্ছে…",
+    });
+    // 🧽 ভেতরের provider-এর নাম ব্যবহারকারীকে দেখাই না
+    send({ type: "tool", id: "fast", name: "উত্তর তৈরি হচ্ছে", state: "running" });
 
     const answered = [];
-    const pending = PERSONAS.map(async (persona) => {
+    const single = mode !== "group";
+
+    await Promise.all(picked.map(async (persona) => {
       const agent = personaAgent(persona);
       const result = await askModel(env, persona, question);
       if (!result.ok) {
-        send({ type: "status", text: `${agent.emoji} ${agent.name}: ${result.failures.slice(0, 2).join(" · ")}` });
+        send({ type: "status", text: `${agent.emoji} ${agent.name}: উত্তর পাওয়া যায়নি, অন্য পথে চেষ্টা করছি…` });
         return;
       }
-      agent.streamId = `f${persona.id}${Date.now()}`;
-      send({ type: "typing", agent });
-      await emitText(send, result.text, agent);
-      send({ type: "agent_message", id: agent.streamId, agent, text: result.text });
+      if (single) {
+        // একজনের উত্তর — সাধারণ delta হিসেবে (অ্যাপে একটা পরিষ্কার বাবল)
+        agent.streamId = `f${persona.id}${Date.now()}`;
+        await emitText(send, result.text, null);
+      } else {
+        agent.streamId = `f${persona.id}${Date.now()}`;
+        send({ type: "typing", agent });
+        await emitText(send, result.text, agent);
+        send({ type: "agent_message", id: agent.streamId, agent, text: result.text });
+      }
       answered.push({ agent, text: result.text, provider: result.provider, ms: result.ms });
-    });
-
-    await Promise.all(pending);
+    }));
 
     send({
       type: "tool_result",
@@ -433,12 +500,7 @@ async function handleFastChat(env, ctx, payload) {
       output: `${answered.length}টি উত্তর · ${((Date.now() - startedAt) / 1000).toFixed(1)} সেকেন্ড`,
     });
 
-    if (mode === "agent" && answered.length) {
-      const block = answered
-        .map((r) => `### ${r.agent.emoji} ${r.agent.name}\n\n${r.text}\n\n`)
-        .join("");
-      send({ type: "final", text: block });
-    }
+    if (single && answered.length) send({ type: "final", text: answered[0].text });
     if (!answered.length) {
       send({
         type: "error",
@@ -452,6 +514,7 @@ async function handleFastChat(env, ctx, payload) {
     else await job;
   });
 }
+
 
 async function handleChat(request, env, ctx) {
   let payload;
