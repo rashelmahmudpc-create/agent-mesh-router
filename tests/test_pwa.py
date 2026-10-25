@@ -203,68 +203,54 @@ class FastLaneTest(unittest.TestCase):
     def test_deploy_workflow_skips_without_secrets(self):
         wf = (ROOT / ".github" / "workflows" / "worker.yml").read_text(encoding="utf-8")
         self.assertIn("CF_API_TOKEN", wf)
-        self.assertIn("found=false", wf)  # secret না থাকলে চুপচাপ বাদ
-        self.assertIn("wrangler-action", wf)
+        self.assertIn("ok=false", wf)  # কাজ করা key না থাকলে চুপচাপ বাদ
+        self.assertIn("wrangler", wf)
+
 
 
 class AutoDeployTest(unittest.TestCase):
-    """☁️ স্যার কিছু করবেন না — workflow নিজেই Cloudflare-এ ডিপ্লয় করবে।"""
+    """☁️ স্যার কিছু করবেন না — workflow নিজেই কাজ করা key খুঁজে ডিপ্লয় করবে।"""
 
     def setUp(self):
         self.wf = (ROOT / ".github" / "workflows" / "worker.yml").read_text(encoding="utf-8")
         self.app = (APP / "index.html").read_text(encoding="utf-8")
 
-    def test_existing_cloudflare_secret_is_reused(self):
-        """স্যারের আগের `ADMISSIONSKY_CLOUDFLARE_API_KEY` secret-ই যেন ব্যবহার হয়।"""
-        self.assertIn("ADMISSIONSKY_CLOUDFLARE_API_KEY", self.wf)
-        self.assertIn("client/v4/accounts", self.wf)  # account id discovery
-        self.assertIn("steps.account.outputs.id", self.wf)
-        # টোকেন না থাকলে চুপচাপ বাদ
-        self.assertIn("found=false", self.wf)
+    def test_any_key_name_and_type_works(self):
+        """নাম যা-ই হোক, API Token হোক বা Global API Key — সব চেষ্টা করে।"""
+        for name in ("CF_API_KEY", "CF_API_TOKEN", "CLOUDFLARE_API_KEY",
+                     "CLOUDFLARE_API_TOKEN", "ADMISSIONSKY_CLOUDFLARE_API_KEY"):
+            self.assertIn(f"secrets.{name}", self.wf, f"{name} চেনে না")
+        self.assertIn("X-Auth-Key", self.wf)            # Global API Key
+        self.assertIn("/user/tokens/verify", self.wf)    # API Token
+        self.assertIn("for name, value in CANDIDATES", self.wf)  # একটার পর একটা চেষ্টা
 
-    def test_token_is_masked_and_verified(self):
-        self.assertIn("::add-mask::", self.wf)          # লগে ছাপা হবে না
-        self.assertIn("/user/tokens/verify", self.wf)   # আসলেই কাজ করে কি না
-        self.assertIn("steps.verify.outputs.ok", self.wf)
-
-    def test_verification_report_reaches_the_readable_issue(self):
-        self.assertIn("issues: write", self.wf)
-        self.assertIn("gh issue comment", self.wf)
-
-    def test_key_shape_is_diagnosed_without_leaking_it(self):
-        self.assertIn("KEY shape", self.wf)
-        self.assertNotIn("print(token)", self.wf)
-
-    def test_worker_workflow_rechecks_itself(self):
-        """key পরে ঠিক করলেও যেন নিজে থেকে ধরা পড়ে।"""
-        self.assertIn("schedule:", self.wf)
-        self.assertIn("cron:", self.wf)
-
-    def test_global_api_key_fallback(self):
-        """Global API Key (X-Auth-Key + email) থাকলেও চলবে।"""
-        self.assertIn("X-Auth-Key", self.wf)
-        self.assertIn("CF_EMAIL", self.wf)
-
-    def test_any_common_secret_name_works(self):
-        for name in ("CF_API_TOKEN", "CLOUDFLARE_API_KEY", "CLOUDFLARE_API_TOKEN", "CF_API_KEY"):
+    def test_email_is_used_for_global_key(self):
+        for name in ("CF_EMAIL", "CLOUDFLARE_EMAIL", "ADMISSIONSKY_CLOUDFLARE_EMAIL"):
             self.assertIn(f"secrets.{name}", self.wf, f"{name} চেনে না")
 
-    def test_provider_keys_are_pushed_to_the_worker(self):
+    def test_keys_are_masked_and_never_printed(self):
+        self.assertIn("::add-mask::", self.wf)
+        for leak in ('echo "$CLOUDFLARE_API_KEY"', 'echo "$CLOUDFLARE_API_TOKEN"'):
+            self.assertNotIn(leak, self.wf, f"key লিক হতে পারে: {leak}")
+
+    def test_keys_are_pushed_to_the_worker(self):
         for name in ("OPENROUTER_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY"):
             self.assertIn(f"put {name}", self.wf, f"{name} Worker-এ বসে না")
 
-    def test_worker_url_is_written_for_the_app(self):
+    def test_url_is_written_for_the_app(self):
         self.assertIn("workers/subdomain", self.wf)
         self.assertIn("docs/app/server.json", self.wf)
-        self.assertIn("/api/health", self.wf)  # যাচাই
-        self.assertIn("contents: write", self.wf)  # কমিট করার অনুমতি
+        self.assertIn("/api/health", self.wf)
+        self.assertIn("contents: write", self.wf)
+
+    def test_report_reaches_the_readable_issue(self):
+        self.assertIn("issues: write", self.wf)
+        self.assertIn("gh issue comment", self.wf)
+
+    def test_retries_itself_every_six_hours(self):
+        self.assertIn("schedule:", self.wf)
+        self.assertIn("cron:", self.wf)
 
     def test_app_reads_the_url_by_itself(self):
         self.assertIn("server.json", self.app)
-        self.assertIn("cfg.server||cfg.ghToken||cfg.fastKey", self.app)  # নিজের সেটিং ছোঁবে না
-
-    def test_secrets_never_printed(self):
-        """key কখনো echo হয় না (public repo)।"""
-        self.assertNotIn('echo "$OPENROUTER_API_KEY"', self.wf)
-        self.assertNotIn('echo "$GROQ_API_KEY"', self.wf)
-        self.assertNotIn('echo "$GEMINI_API_KEY"', self.wf)
+        self.assertIn("cfg.server||cfg.ghToken||cfg.fastKey", self.app)

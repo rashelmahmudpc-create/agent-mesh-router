@@ -1,22 +1,18 @@
 name: worker
 
-# 🔄 recheck: 2026-10-25T16:20Z (টোকেন আবার যাচাই)
-
-# ☁️ Cloudflare Worker — সম্পূর্ণ অটো ডিপ্লয় (কোনো ক্লিক নেই)
+# ☁️ Cloudflare Worker — সম্পূর্ণ অটো ডিপ্লয়
 #
-# 🔑 টোকেনের নাম যা-ই হোক, নিজেই খুঁজে নেয়:
-#     ADMISSIONSKY_CLOUDFLARE_API_KEY  ← আপনার আগের secret
-#     CF_API_TOKEN / CLOUDFLARE_API_KEY / CLOUDFLARE_API_TOKEN / CF_API_KEY
-#   Account ID থাকলে ব্যবহার করে, নইলে API থেকে খুঁজে নেয়।
+# 🔑 যেকোনো ধরনের key চলবে, নাম যা-ই হোক:
+#     • API Token      (৪০ অক্ষর)                    → Bearer
+#     • Global API Key (৩৭ অক্ষর hex) + email          → X-Auth-Key
+#   প্রার্থী: CF_API_KEY, CF_API_TOKEN, CLOUDFLARE_API_KEY,
+#            CLOUDFLARE_API_TOKEN, ADMISSIONSKY_CLOUDFLARE_API_KEY
+#   email : CF_EMAIL, CLOUDFLARE_EMAIL, ADMISSIONSKY_CLOUDFLARE_EMAIL
 #
-# তারপর এই workflow নিজেই —
-#   ১) টোকেন যাচাই করে (দেখায় কী কী করতে পারে)
-#   ২) Worker টেস্ট চালায়
-#   ৩) deploy করে
-#   ৪) OPENROUTER / GROQ / GEMINI key গুলো Worker-এর secret হিসেবে বসিয়ে দেয়
-#   ৫) ঠিকানা বের করে docs/app/server.json-এ কমিট করে (অ্যাপ নিজেই নেবে)
-#   ৬) /api/health দিয়ে যাচাই করে
-# কোনো টোকেন না থাকলে চুপচাপ বাদ যায় (কিছু ভাঙে না)।
+# 🧠 সব প্রার্থী একটা একটা করে **আসলেই যাচাই** করা হয়, তারপর যেটা কাজ করে সেটাই ব্যবহার হয়।
+#    (পুরনো/ভুল key পড়ে থাকলেও আর আটকাবে না)
+#
+# তারপর নিজেই — টেস্ট → deploy → provider key বসানো → server.json → /api/health যাচাই।
 
 on:
   push:
@@ -24,14 +20,13 @@ on:
     paths:
       - "worker/**"
       - ".github/workflows/worker.yml"
-  # 🔁 প্রতি ৬ ঘণ্টায় নিজেই আবার চেষ্টা করে — স্যার পরে key ঠিক করলেও আপনাআপনি ধরা পড়বে
   schedule:
-    - cron: "37 */6 * * *"
+    - cron: "37 */6 * * *" # প্রতি ৬ ঘণ্টায় আবার চেষ্টা
   workflow_dispatch:
 
 permissions:
-  contents: write # docs/app/server.json কমিট করার জন্য
-  issues: write   # টোকেন যাচাইয়ের রিপোর্ট Issue #5-এ দেখাতে
+  contents: write
+  issues: write
 
 concurrency:
   group: worker-deploy
@@ -40,226 +35,151 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: true
 
-      # ---------- 🔑 টোকেন খোঁজা ----------
-      - name: Cloudflare টোকেন খুঁজে নাও (নাম যা-ই হোক)
-        id: token
+      # ---------- 🔑 কাজ করা key খুঁজে নাও ----------
+      - name: কাজ করা Cloudflare key খুঁজে নাও
+        id: pick
         env:
-          T1: ${{ secrets.ADMISSIONSKY_CLOUDFLARE_API_KEY }}
-          T2: ${{ secrets.CF_API_TOKEN }}
-          T3: ${{ secrets.CLOUDFLARE_API_KEY }}
-          T4: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          T5: ${{ secrets.CF_API_KEY }}
-          A1: ${{ secrets.CF_ACCOUNT_ID }}
-          A2: ${{ secrets.ADMISSIONSKY_CLOUDFLARE_ACCOUNT_ID }}
-          A3: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          K1: ${{ secrets.CF_API_KEY }}
+          K2: ${{ secrets.CF_API_TOKEN }}
+          K3: ${{ secrets.CLOUDFLARE_API_KEY }}
+          K4: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          K5: ${{ secrets.ADMISSIONSKY_CLOUDFLARE_API_KEY }}
           E1: ${{ secrets.CF_EMAIL }}
           E2: ${{ secrets.CLOUDFLARE_EMAIL }}
           E3: ${{ secrets.ADMISSIONSKY_CLOUDFLARE_EMAIL }}
+          A1: ${{ secrets.CF_ACCOUNT_ID }}
+          A2: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          A3: ${{ secrets.ADMISSIONSKY_CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -uo pipefail
-          TOK=""; NAME=""
-          for n in ADMISSIONSKY_CLOUDFLARE_API_KEY CF_API_TOKEN CLOUDFLARE_API_KEY CLOUDFLARE_API_TOKEN CF_API_KEY; do
-            v=""
-            case "$n" in
-              ADMISSIONSKY_CLOUDFLARE_API_KEY) v="${T1:-}" ;;
-              CF_API_TOKEN) v="${T2:-}" ;;
-              CLOUDFLARE_API_KEY) v="${T3:-}" ;;
-              CLOUDFLARE_API_TOKEN) v="${T4:-}" ;;
-              CF_API_KEY) v="${T5:-}" ;;
-            esac
-            if [ -n "$v" ]; then TOK="$v"; NAME="$n"; break; fi
-          done
-          ACC="${A1:-}${A2:-}${A3:-}"
-          EMAIL="${E1:-}${E2:-}${E3:-}"
-          if [ -z "$TOK" ]; then
-            echo "found=false" >> "$GITHUB_OUTPUT"
-            echo "⏭️ কোনো Cloudflare টোকেন নেই — ডিপ্লয় বাদ"
-            exit 0
-          fi
-          echo "::add-mask::$TOK"
-          {
-            echo "found=true"
-            echo "name=$NAME"
-            echo "account=$ACC"
-            echo "email=$EMAIL"
-            printf 'token=%s\n' "$TOK"
-          } >> "$GITHUB_OUTPUT"
-          echo "✅ টোকেন পাওয়া গেছে: $NAME"
-
-      # ---------- 🩺 যাচাই (কী কী করতে পারে দেখায়) ----------
-      - name: টোকেন যাচাই করো
-        id: verify
-        if: steps.token.outputs.found == 'true'
-        env:
-          TOKEN: ${{ steps.token.outputs.token }}
-          EMAIL: ${{ steps.token.outputs.email }}
-        run: |
-          set -uo pipefail
-          python3 - <<'PY' > report.txt 2>&1 || true
+          python3 - <<'PY'
           import json, os, urllib.request, urllib.error
 
-          token = os.environ.get("TOKEN", "").strip()
-          email = os.environ.get("EMAIL", "").strip()
           BASE = "https://api.cloudflare.com/client/v4"
-          MODE = "bearer"
+          CANDIDATES = [
+              ("CF_API_KEY", os.environ.get("K1", "")),
+              ("CF_API_TOKEN", os.environ.get("K2", "")),
+              ("CLOUDFLARE_API_KEY", os.environ.get("K3", "")),
+              ("CLOUDFLARE_API_TOKEN", os.environ.get("K4", "")),
+              ("ADMISSIONSKY_CLOUDFLARE_API_KEY", os.environ.get("K5", "")),
+          ]
+          EMAILS = [os.environ.get(k, "").strip() for k in ("E1", "E2", "E3")]
+          EMAIL = next((e for e in EMAILS if e), "")
+          ACC = next((os.environ.get(k, "").strip() for k in ("A1", "A2", "A3")
+                      if os.environ.get(k, "").strip()), "")
 
-          def headers_for(mode):
-              h = {"Content-Type": "application/json"}
-              if mode == "global":
-                  h["X-Auth-Email"] = email
-                  h["X-Auth-Key"] = token
-              else:
-                  h["Authorization"] = f"Bearer {token}"
-              return h
-
-          def call(path, mode=None):
-              req = urllib.request.Request(BASE + path, headers=headers_for(mode or MODE))
+          def req(path, headers):
+              r = urllib.request.Request(BASE + path, headers={"Content-Type": "application/json", **headers})
               try:
-                  with urllib.request.urlopen(req, timeout=25) as r:
-                      return r.status, json.loads(r.read().decode() or "{}")
+                  with urllib.request.urlopen(r, timeout=25) as resp:
+                      return json.loads(resp.read().decode() or "{}")
               except urllib.error.HTTPError as e:
                   try:
-                      body = json.loads(e.read().decode() or "{}")
+                      return json.loads(e.read().decode() or "{}")
                   except Exception:
-                      body = {}
-                  return e.code, body
+                      return {"success": False, "errors": [{"message": f"HTTP {e.code}"}]}
               except Exception as exc:  # noqa: BLE001
-                  return 0, {"errors": [{"message": str(exc)}]}
+                  return {"success": False, "errors": [{"message": str(exc)[:120]}]}
 
-          # 🔎 key-এর "আকৃতি" দেখি — মান নয়, শুধু ধরন বোঝার জন্য
-          shape = f"length={len(token)}"
-          if all(c in "0123456789abcdefABCDEF" for c in token):
-              shape += " hex-only"
-          if "-" in token or "_" in token:
-              shape += " has-dash/underscore"
-          print(f"KEY shape: {shape}")
-          if len(token) == 37 and all(c in "0123456789abcdefABCDEF" for c in token):
-              print("  ⇒ এটা Global API Key-এর মতো দেখাচ্ছে — তাহলে CF_EMAIL secret-ও দরকার")
-          elif len(token) < 30:
-              print("  ⇒ খুব ছোট — সম্ভবত পুরো token কপি হয়নি")
-          else:
-              print("  ⇒ API Token-এর মতো দেখাচ্ছে (ঠিক আছে, শুধু মানটা বৈধ নয়)")
+          lines, chosen = [], None
+          for name, value in CANDIDATES:
+              value = (value or "").strip()
+              if not value:
+                  lines.append(f"- {name}: নেই")
+                  continue
+              shape = f"{len(value)} অক্ষর"
+              if len(value) == 37 and all(c in "0123456789abcdefABCDEF" for c in value):
+                  shape += " (Global API Key-এর মতো)"
+              elif len(value) == 40:
+                  shape += " (API Token-এর মতো)"
+              print(f"::add-mask::{value}")
+              # ১) Bearer token হিসেবে
+              data = req("/user/tokens/verify", {"Authorization": f"Bearer {value}"})
+              ok = bool(data.get("success")) and (data.get("result") or {}).get("status") == "active"
+              if ok:
+                  lines.append(f"- {name}: ✅ WORK (Bearer API Token, {shape})")
+                  chosen = {"name": name, "value": value, "mode": "bearer", "email": "", "account": ACC}
+                  break
+              # ২) Global API Key হিসেবে (email দরকার)
+              if EMAIL:
+                  data = req("/accounts", {"X-Auth-Email": EMAIL, "X-Auth-Key": value})
+                  rows = data.get("result") or []
+                  if data.get("success") and rows:
+                      if not ACC:
+                          ACC = rows[0]["id"]
+                      lines.append(f"- {name}: ✅ WORK (Global API Key, {shape})")
+                      chosen = {"name": name, "value": value, "mode": "global", "email": EMAIL, "account": ACC}
+                      break
+                  lines.append(f"- {name}: ❌ Global key হিসেবে চলল না ({shape})")
+              else:
+                  msg = ((data.get("errors") or [{}])[0].get("message") or "")[:60]
+                  lines.append(f"- {name}: ❌ Bearer নয় ({shape}) · {msg}"
+                               + (" · email নেই তাই Global পথ চেষ্টা করা যায়নি" if not EMAIL else ""))
 
-          status, data = call("/user/tokens/verify")
-          ok = bool(data.get("success")) and (data.get("result") or {}).get("status") == "active"
-          print(f"VERIFY mode=bearer ok={ok} status={status}")
-          for err in (data.get("errors") or [])[:2]:
-              print(f"  error: {err.get('message','')[:160]}")
+          report = "\n".join(lines) or "- কিছুই পাওয়া যায়নি"
+          print(report)
+          with open("report.txt", "w", encoding="utf-8") as fh:
+              fh.write(report + "\n")
 
-          if not ok and email:
-              MODE = "global"
-              print("→ Bearer কাজ করল না; Global API Key (X-Auth-Key + email) দিয়ে চেষ্টা…")
-              status, data = call("/accounts")
-              ok = bool(data.get("success")) and bool(data.get("result"))
-              print(f"VERIFY mode=global ok={ok} status={status}")
-              for err in (data.get("errors") or [])[:2]:
-                  print(f"  error: {err.get('message','')[:160]}")
-          elif not ok:
-              print("→ Bearer কাজ করল না, আর email নেই — তাই Global Key পথ চেষ্টা করা যায়নি")
-              print("  সমাধান: Workers permission সহ নতুন token, অথবা CF_EMAIL secret যোগ করুন")
-
-          accounts = []
-          if ok:
-              status, data = call("/accounts", MODE)
-              accounts = data.get("result") or []
-              print(f"ACCOUNTS ok={bool(data.get('success'))} count={len(accounts)}")
-              for acc in accounts[:5]:
-                  print(f"  - {acc.get('name','?')} ({acc.get('id','')})")
-          with open("accounts.json", "w", encoding="utf-8") as fh:
-              json.dump(accounts, fh)
+          out = os.environ.get("GITHUB_ENV", "")
+          with open(out, "a", encoding="utf-8") as fh:
+              if chosen:
+                  fh.write(f"CF_MODE={chosen['mode']}\n")
+                  fh.write(f"CF_KEY_NAME={chosen['name']}\n")
+                  fh.write(f"CLOUDFLARE_ACCOUNT_ID={chosen['account']}\n")
+                  if chosen["mode"] == "bearer":
+                      fh.write(f"CLOUDFLARE_API_TOKEN={chosen['value']}\n")
+                  else:
+                      fh.write(f"CLOUDFLARE_API_KEY={chosen['value']}\n")
+                      fh.write(f"CLOUDFLARE_EMAIL={chosen['email']}\n")
+          with open(os.environ.get("GITHUB_OUTPUT", "/dev/null"), "a", encoding="utf-8") as fh:
+              if chosen and chosen["account"]:
+                  fh.write("ok=true\n")
+                  fh.write(f"mode={chosen['mode']}\n")
+                  fh.write(f"keyname={chosen['name']}\n")
+              else:
+                  fh.write("ok=false\n")
+                  fh.write("mode=-\n")
+                  fh.write("keyname=-\n")
           PY
-          cat report.txt
-          if grep -q "^VERIFY ok=True" report.txt; then echo "ok=true" >> "$GITHUB_OUTPUT";
-          else echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: রিপোর্ট দেখাও
+        if: always()
+        run: |
           {
-            echo "## 🔑 Cloudflare টোকেন যাচাই — \`${{ steps.token.outputs.name }}\`"
+            echo "## 🔑 Cloudflare key যাচাই"
             echo ""
             echo '```'
             cat report.txt 2>/dev/null || echo "(রিপোর্ট নেই)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY" || true
 
-      - name: রিপোর্ট আপলোড (দেখার জন্য)
-        if: always()
-        uses: actions/upload-artifact@v4
-        continue-on-error: true
-        with:
-          name: cf-token-report
-          path: |
-            report.txt
-            accounts.json
-          if-no-files-found: ignore
-
-      - name: রিপোর্ট Issue #5-এ লেখো (পড়া যায় এমন)
-        if: always()
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -uo pipefail
-          [ -f report.txt ] || exit 0
-          {
-            echo "### ☁️ Cloudflare টোকেন যাচাই — $(date -u '+%Y-%m-%d %H:%M UTC')"
-            echo ""
-            echo "- secret: \`${{ steps.token.outputs.name || '(পাওয়া যায়নি)' }}\`"
-            echo "- run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            echo ""
-            echo '```'
-            cat report.txt
-            echo '```'
-          } > cf-report.md
-          NO=$(gh issue list --label mesh-status --state open --json number -q '.[0].number' 2>/dev/null || true)
-          [ -z "$NO" ] && NO=5
-          gh issue comment "$NO" --body-file cf-report.md || true
-
-      - name: Account ID ঠিক করো
-        id: account
-        if: steps.token.outputs.found == 'true' && steps.verify.outputs.ok == 'true'
-        env:
-          GIVEN: ${{ steps.token.outputs.account }}
-        run: |
-          set -uo pipefail
-          ID="$GIVEN"
-          if [ -z "$ID" ] && [ -f accounts.json ]; then
-            ID=$(python3 -c "import json;d=json.load(open('accounts.json'));print(d[0]['id'] if d else '')" 2>/dev/null || true)
-          fi
-          echo "id=$ID" >> "$GITHUB_OUTPUT"
-          if [ -n "$ID" ]; then echo "✅ Account ID ঠিক হয়েছে"; else echo "❌ Account ID পাওয়া গেল না"; fi
-
       # ---------- 🧪 টেস্ট ----------
       - uses: actions/setup-node@v4
-        if: steps.account.outputs.id != ''
+        if: steps.pick.outputs.ok == 'true'
         with:
           node-version: "22"
 
       - name: Worker টেস্ট
-        if: steps.account.outputs.id != ''
+        if: steps.pick.outputs.ok == 'true'
         run: node tests/js/worker_check.mjs
 
       # ---------- 🚀 ডিপ্লয় ----------
       - name: Deploy → Cloudflare
-        if: steps.account.outputs.id != ''
-        env:
-          CF_API_EMAIL: ${{ steps.token.outputs.email }}
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ steps.token.outputs.token }}
-          accountId: ${{ steps.account.outputs.id }}
-          workingDirectory: worker
-          command: deploy
+        if: steps.pick.outputs.ok == 'true'
+        working-directory: worker
+        run: npx --yes wrangler@4 deploy
 
       - name: Worker-এ key গুলো বসাও (secret)
-        if: steps.account.outputs.id != ''
+        if: steps.pick.outputs.ok == 'true'
         working-directory: worker
         env:
-          CLOUDFLARE_API_TOKEN: ${{ steps.token.outputs.token }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ steps.account.outputs.id }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_API_KEY_2: ${{ secrets.OPENROUTER_API_KEY_2 }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -268,7 +188,7 @@ jobs:
           APP_TOKEN: ${{ secrets.APP_TOKEN }}
         run: |
           set -uo pipefail
-          put() { # নাম, মান
+          put() {
             if [ -z "${2:-}" ]; then echo "⏭️ $1 নেই — বাদ"; return 0; fi
             if printf '%s' "$2" | npx --yes wrangler@4 secret put "$1" >/dev/null 2>&1; then
               echo "✅ $1 বসানো হলো"
@@ -283,21 +203,21 @@ jobs:
           put GITHUB_TOKEN "$MESH_GH_PAT"
           put APP_TOKEN "$APP_TOKEN"
 
-      # ---------- 🔗 ঠিকানা + যাচাই ----------
+      # ---------- 🔗 ঠিকানা ----------
       - name: ঠিকানা বের করো + যাচাই করো
-        if: steps.account.outputs.id != ''
+        if: steps.pick.outputs.ok == 'true'
         id: url
-        env:
-          TOKEN: ${{ steps.token.outputs.token }}
-          ACC: ${{ steps.account.outputs.id }}
         run: |
           set -uo pipefail
-          SUB=$(curl -s -H "Authorization: Bearer $TOKEN" \
-            "https://api.cloudflare.com/client/v4/accounts/$ACC/workers/subdomain" \
+          HDR=(-H "Content-Type: application/json")
+          if [ "${CF_MODE:-}" = "bearer" ]; then HDR+=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          else HDR+=(-H "X-Auth-Email: $CLOUDFLARE_EMAIL" -H "X-Auth-Key: $CLOUDFLARE_API_KEY"); fi
+          SUB=$(curl -s "${HDR[@]}" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" \
             | python3 -c "import json,sys; print((json.load(sys.stdin).get('result') or {}).get('subdomain',''))" 2>/dev/null || true)
           if [ -z "$SUB" ]; then
             echo "found=false" >> "$GITHUB_OUTPUT"
-            echo "⚠️ workers.dev subdomain পাওয়া গেল না"
+            echo "⚠️ workers.dev subdomain পাওয়া গেল না (ড্যাশবোর্ড → Workers দেখুন)"
             exit 0
           fi
           URL="https://mesh-chat.$SUB.workers.dev"
@@ -330,17 +250,38 @@ jobs:
           git commit -m "chore(worker): অ্যাপের সার্ভার ঠিকানা $URL"
           git push || true
 
+      # ---------- 📮 পড়া যায় এমন রিপোর্ট ----------
+      - name: রিপোর্ট Issue #5-এ লেখো
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          {
+            echo "### ☁️ Cloudflare ডিপ্লয় — $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo ""
+            echo "- কাজ করা key: \`${{ steps.pick.outputs.keyname }}\` (mode: \`${{ steps.pick.outputs.mode }}\`)"
+            [ -n "${{ steps.url.outputs.url }}" ] && echo "- ঠিকানা: ${{ steps.url.outputs.url }}"
+            echo "- run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo ""
+            echo '```'
+            cat report.txt 2>/dev/null || echo "(রিপোর্ট নেই)"
+            echo '```'
+          } > cf-report.md
+          NO=$(gh issue list --label mesh-status --state open --json number -q '.[0].number' 2>/dev/null || true)
+          [ -z "$NO" ] && NO=5
+          gh issue comment "$NO" --body-file cf-report.md || true
+
       - name: সারসংক্ষেপ
         if: always()
         run: |
           {
             echo "## ☁️ Cloudflare Worker"
             echo ""
-            echo "- টোকেন: \`${{ steps.token.outputs.name || '(পাওয়া যায়নি)' }}\`"
-            echo "- যাচাই: \`${{ steps.verify.outputs.ok || '-' }}\`"
+            echo "- key: \`${{ steps.pick.outputs.keyname }}\` · mode: \`${{ steps.pick.outputs.mode }}\`"
             if [ -n "${{ steps.url.outputs.url }}" ]; then
-              echo "- 🔗 ঠিকানা: \`${{ steps.url.outputs.url }}\`"
-              echo "- ✅ অ্যাপে কিছু বসাতে হবে না — \`docs/app/server.json\` থেকেই নেবে"
+              echo "- 🔗 ${{ steps.url.outputs.url }}"
+              echo "- ✅ অ্যাপে কিছু বসাতে হবে না (\`docs/app/server.json\`)"
             fi
-            echo "- ⚡ গতি: ৩–৮ সেকেন্ড (Actions-এর ৮–১০ মিনিটের বদলে)"
           } >> "$GITHUB_STEP_SUMMARY"
