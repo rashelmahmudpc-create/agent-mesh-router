@@ -240,12 +240,12 @@
         "long",
         "বড়"
       ],
-      "notes": "ওদের ক্লাউড API (priority 1) — এখন গ্রুপ চ্যাটেও উত্তর দেয়। কোটা বাঁচাতে দিনে সর্বোচ্চ ২ conversation (.mesh-daily.json-এ হিসাব থাকে)।",
+      "notes": "ওদের ক্লাউড API (priority 1) — গ্রুপ চ্যাটেও উত্তর দেয়। কোটা বাঁচাতে দিনে সর্বোচ্চ ৩ conversation (ওদের ফ্রি টিয়ার ~১০/দিন)।",
       "priority": 1,
       "keys": [
         "OPENHANDS_API_KEY"
       ],
-      "daily_limit": 2,
+      "daily_limit": 3,
       "timeout_sec": 900
     }
   ]
