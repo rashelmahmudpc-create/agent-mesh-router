@@ -36,8 +36,9 @@ permissions:
   issues: write
   pull-requests: write
 
+# 🚦 প্রতিটা Issue-comment আলাদা রানে, একসাথে চলে — আগের রান শেষ হওয়ার জন্য লাইনে দাঁড়াতে হয় না
 concurrency:
-  group: mesh-${{ github.ref }}
+  group: mesh-${{ github.event_name == 'issue_comment' && github.run_id || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -71,27 +72,42 @@ jobs:
           node-version: "22"
         continue-on-error: true
 
-      - name: ⚡ Cache (ইনস্টল দ্রুত করতে)
+      - name: 📅 সপ্তাহ (এজেন্ট সপ্তাহে একবার আপডেট হবে)
+        id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      # ⚡ ইনস্টল করা এজেন্টগুলোই cache-এ রাখি — প্রতি রানে আবার ইনস্টল হয় না
+      - name: ⚡ Cache (ইনস্টল করা এজেন্ট)
+        id: clicache
         uses: actions/cache@v4
         with:
           path: |
-            ~/.npm
-            ~/.cache/pip
-          key: mesh-clis-${{ runner.os }}-${{ hashFiles('config/agents.json') }}
-          restore-keys: mesh-clis-${{ runner.os }}-
+            ~/.npm-global
+            ~/.local
+          key: mesh-tools-v2-${{ runner.os }}-py312-node22-${{ steps.week.outputs.week }}-${{ hashFiles('config/agents.json') }}
 
-      - name: Install agent CLIs
+      - name: Install agent CLIs (cache থাকলে বাদ)
         continue-on-error: true
         run: |
+          mkdir -p "$HOME/.npm-global"
+          npm config set prefix "$HOME/.npm-global"
+          export PATH="$HOME/.npm-global/bin:$HOME/.local/bin:$PATH"
+          echo "$HOME/.npm-global/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          if [ "${{ steps.clicache.outputs.cache-hit }}" = "true" ] \
+             && command -v opencode >/dev/null && command -v claude >/dev/null \
+             && hermes --help >/dev/null 2>&1 \
+             && python -c "import openhands.sdk" >/dev/null 2>&1; then
+            echo "✅ cache থেকে এসেছে — ইনস্টল লাগল না"
+            exit 0
+          fi
+          echo "📦 প্রথমবার/আপডেট — ইনস্টল হচ্ছে"
           npm install -g @opencode/cli || true              # opencode
           npm install -g @anthropic-ai/claude-code || true  # claude
           # ☤ Hermes — PyPI প্যাকেজ (যাচাই করা: hermes-agent 0.19.0)
-          python -m pip install --user --quiet hermes-agent || true
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Install OpenHands SDK (ঐচ্ছিক)
-        continue-on-error: true
-        run: python -m pip install --user --quiet openhands-sdk openhands-workspace || true
+          python -m pip install --user --quiet --force-reinstall hermes-agent || true
+          # 🖐️ OpenHands SDK
+          python -m pip install --user --quiet openhands-sdk openhands-workspace || true
 
       - name: Verify CLIs
         continue-on-error: true
