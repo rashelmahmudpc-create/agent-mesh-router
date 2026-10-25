@@ -606,3 +606,28 @@ class AutoTriggerTest(unittest.TestCase):
 
     def test_marker_file_exists(self):
         self.assertTrue((ROOT / ".mesh-run").exists())
+
+
+class CleanReplyTest(unittest.TestCase):
+    def test_noise_and_reasoning_removed(self):
+        from mesh.textutil import clean_reply
+
+        raw = (
+            "⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only\n\n"
+            "┌─ Reasoning ───────────┐\nThe user is asking...\n└───────────────────────┘\n"
+            "আমি Hermes Agent, প্রস্তুত আছি।\n"
+        )
+        self.assertEqual(clean_reply(raw), "আমি Hermes Agent, প্রস্তুত আছি।")
+
+    def test_only_noise_becomes_empty(self):
+        from mesh.textutil import clean_reply
+
+        self.assertEqual(clean_reply("⚠ tirith security scanner enabled but not available"), "")
+
+    def test_adapter_uses_clean_reply(self):
+        spec = AgentSpec(name="hermes", command=["hermes", "chat", "-q", "{message}"])
+        noisy = "⚠ tirith security scanner enabled but not available\n\nআসল উত্তর"
+        adapter = CliAdapter(spec, runner=lambda c, e, w, t: (0, noisy, ""))
+        reply = adapter.send("হাই")
+        self.assertTrue(reply.ok)
+        self.assertEqual(reply.text, "আসল উত্তর")
