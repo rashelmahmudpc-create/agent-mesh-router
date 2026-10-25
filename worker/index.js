@@ -21,7 +21,9 @@
 
 const API = "https://api.github.com";
 const MAX_TEXT = 4000;
-const MAX_WAIT_MS = 90000;
+// ⏱️ উত্তর কতক্ষণ অপেক্ষা করবে। Actions রান বাস্তবে ৩–৯ মিনিট নেয় (মাপা:
+// 217s, 356s, 570s), তাই ডিফল্ট ৫ মিনিট। env.MAX_WAIT_MS দিয়ে বদলানো যায়।
+const DEFAULT_MAX_WAIT_MS = 300000;
 
 const cors = (env) => ({
   "access-control-allow-origin": env.ALLOWED_ORIGIN || "*",
@@ -218,6 +220,8 @@ async function handleChat(request, env) {
     // 🧪 টেস্টে ছোট করা যায় (POLL_MS / QUIET_MS env), ডিফল্ট আসল মান
     const pollMs = Number(env.POLL_MS) || 3000;
     const quietMs = Number(env.QUIET_MS) || 12000;
+    const maxWait = Number(env.MAX_WAIT_MS) || DEFAULT_MAX_WAIT_MS;
+    const maxPolls = Math.ceil(maxWait / pollMs) + 2;
     send({ type: "thinking", text: "ম্যানেজার কাজটা ভাগ করছে…" });
     send({ type: "tool", id: "mesh", name: "মেশ", input: "agent-mesh-router", state: "running" });
 
@@ -225,10 +229,16 @@ async function handleChat(request, env) {
     let collected = "";
     let polls = 0;
     let firstAt = 0;
+    let beatAt = Date.now();
 
-    while (Date.now() - startedAt < MAX_WAIT_MS && polls < 26) {
+    while (Date.now() - startedAt < maxWait && polls < maxPolls) {
       await sleep(pollMs);
       polls += 1;
+      // প্রতি ২০ সেকেন্ডে হৃদস্পন্দন — অ্যাপে যেন "আটকে গেছে" মনে না হয়
+      if (Date.now() - beatAt > 20000) {
+        beatAt = Date.now();
+        send({ type: "status", text: `এখনো কাজ চলছে… ${Math.round((Date.now() - startedAt) / 1000)} সেকেন্ড` });
+      }
       const query = new URLSearchParams({ per_page: "40", since });
       const res = await gh(env, issuePath(env, `/comments?${query.toString()}`));
       if (!res.ok) { send({ type: "status", text: "GitHub-এ সমস্যা, আবার চেষ্টা…" }); continue; }

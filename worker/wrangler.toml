@@ -9,6 +9,9 @@ compatibility_date = "2026-01-01"
 MESH_REPO = "rashelmahmudpc-create/agent-mesh-router"
 MESH_ISSUE = "3"
 ALLOWED_ORIGIN = "*"
+# ⏱️ উত্তর কতক্ষণ অপেক্ষা করবে (মিলিসেকেন্ড)। খালি রাখলে ডিফল্ট ৫ মিনিট।
+# Actions রান সাধারণত ৩–৯ মিনিট নেয় — খুব কম দিলে অ্যাপে উত্তর আসবে না।
+# MAX_WAIT_MS = "300000"
 
 # 🔑 একবার করে চালান (টার্মিনালে):
 #   npx wrangler secret put GITHUB_TOKEN    # fine-grained PAT, Issues: Read & Write

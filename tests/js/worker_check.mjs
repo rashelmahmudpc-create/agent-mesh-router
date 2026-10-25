@@ -49,6 +49,7 @@ const env = {
   ALLOWED_ORIGIN: "*",
   POLL_MS: "10",
   QUIET_MS: "60",
+  MAX_WAIT_MS: "2000", // টেস্ট আটকে না থাকে; আসল ডিফল্ট ৫ মিনিট (worker/index.js)
 };
 
 const req = (p, opts = {}) => new Request(`https://w.dev${p}`, opts);
