@@ -122,5 +122,55 @@ check("গ্রুপে একাধিক এজেন্টের বাব�
 
 check("কোনো JS এরর নেই", errors.length === 0, errors.slice(0, 2).join(" | "));
 
+/* ---- GitHub সরাসরি মোড (Worker ছাড়া) ---- */
+// আলাদা JSDOM: localStorage-এ টোকেন বসানো, GitHub API নকল করা (fetch mock)
+{
+  const calls = [];
+  const agentBody = "নমস্কার স্যার — আমি আসল এজেন্ট ✅\n<!-- mesh:claude -->";
+  const fakeFetch = async (url, init = {}) => {
+    const u = String(url);
+    const method = init.method || "GET";
+    calls.push({ u, method });
+    const json = (data, status = 200) =>
+      new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+    if (u.includes("/issues/3/comments") && method === "POST") return json({ id: 999 }, 201);
+    if (u.includes("/issues/3/comments")) {
+      const polls = calls.filter((c) => c.u.includes("/comments?")).length;
+      return json(polls > 1 ? [{ id: 1001, body: agentBody, user: { login: "github-actions[bot]" } }] : []);
+    }
+    if (/\/issues\/3$/.test(u)) return json({ number: 3, title: "hall" });
+    return json({ message: "not found" }, 404);
+  };
+  const ghErrors = [];
+  const ghDom = new JSDOM(html, {
+    url: "http://localhost/docs/app/index.html",
+    pretendToBeVisual: true,
+    runScripts: "dangerously",
+    beforeParse(w) {
+      w.fetch = fakeFetch;
+      w.localStorage.setItem("ax.cfg", JSON.stringify({
+        demo: false, ghToken: "test-token", ghRepo: "owner/repo", ghIssue: "3",
+        server: "", token: "", theme: "dark", accent: "#d97757", fs: 17, lang: "bn-BD",
+        speak: false, mode: "agent", name: "",
+        ghPollMs: 50, ghQuietMs: 300, ghWaitMs: 5000,
+      }));
+    },
+  });
+  ghDom.window.addEventListener("error", (e) => ghErrors.push(String(e.message || e.error)));
+  const gd = ghDom.window.document;
+  const gq = (s) => gd.querySelector(s);
+  check("GitHub মোডে চিপ দেখায়", await until(() => (gq("#feed .conn-chip")?.textContent || "").includes("GitHub"), 5000),
+    gq("#feed .conn-chip")?.textContent);
+  gq("#inp").value = "আজ কী করবো?";
+  gq("#inp").dispatchEvent(new ghDom.window.Event("input", { bubbles: true }));
+  gq("#btnMain").click();
+  check("Issue-এ @mesh comment গেছে", await until(() => calls.some((c) => c.method === "POST"), 5000));
+  check("GitHub থেকে আসল উত্তর এসেছে", await until(() => (gq(".msg.ai .md")?.textContent || "").includes("আসল এজেন্ট"), 8000),
+    (gq(".msg.ai .md")?.textContent || "").slice(0, 40));
+  check("এজেন্টের নাম/ইমোজি বসেছে", (gq(".msg.ai .md")?.textContent || "").includes("Claude Code"));
+  check("GitHub মোডে JS এরর নেই", ghErrors.length === 0, ghErrors.slice(0, 2).join(" | "));
+  ghDom.window.close();
+}
+
 console.log(fails === 0 ? "\n✅ সব DOM পরীক্ষা পাস" : `\n❌ ${fails}টা ব্যর্থ`);
 process.exit(fails === 0 ? 0 : 1);
