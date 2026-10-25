@@ -757,3 +757,12 @@ class NetworkIndependenceTest(unittest.TestCase):
 
         with mock.patch.object(models, "discover_many", return_value=[]):
             self.assertEqual(cli.main(["--free-model-list", "3"]), 1)
+
+
+class EmptyReplyDiagnosticsTest(unittest.TestCase):
+    def test_stderr_is_shown_when_reply_is_empty(self):
+        spec = AgentSpec(name="hermes", command=["hermes", "chat", "-q", "{message}"])
+        adapter = CliAdapter(spec, runner=lambda c, e, w, t: (0, "", "warning: model not loaded"))
+        reply = adapter.send("হাই")
+        self.assertFalse(reply.ok)
+        self.assertIn("model not loaded", reply.text)

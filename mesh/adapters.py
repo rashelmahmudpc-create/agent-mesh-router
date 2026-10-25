@@ -104,9 +104,11 @@ class CliAdapter:
                     reply_text = clip(cleaned, self.reply_limit)
                     return Reply(self.spec.name, self.spec.display(), True, reply_text, {"key": var or None})
                 if code == 0:
+                    hint = clip(strip_ansi(err or ""), 800)
                     last = Reply(
                         self.spec.name, self.spec.display(), False,
-                        "❌ এজেন্ট চালু হলো কিন্তু কোনো উত্তর দিল না (খালি আউটপুট)।",
+                        "❌ এজেন্ট চালু হলো কিন্তু কোনো উত্তর দিল না (খালি আউটপুট)।"
+                        + (f"\n\n_জানানো হয়েছে:_ {hint}" if hint else ""),
                         {"code": code, "empty": True},
                     )
                     break  # এই কমান্ডে উত্তর নেই — পরের (fallback) চেষ্টা করি

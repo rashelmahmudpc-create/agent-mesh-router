@@ -160,7 +160,7 @@
         "-q",
         "{message}",
         "-m",
-        "$FREE_M1:-openrouter/free",
+        "openrouter/free",
         "--provider",
         "openrouter",
         "-Q",
@@ -180,7 +180,7 @@
         "মনে",
         "পরিকল্পনা"
       ],
-      "notes": "মডেল অটো-বাছাই (FREE_M1..M3)। সব খালি/ব্যর্থ হলে OpenCode এর ফ্রি মডেল দিয়ে শেষ চেষ্টা",
+      "notes": "আগে প্রমাণিত openrouter/free; ব্যর্থ হলে FREE_M1/M2; শেষে OpenCode এর ফ্রি মডেল",
       "fallback_commands": [
         [
           "hermes",
@@ -188,7 +188,7 @@
           "-q",
           "{message}",
           "-m",
-          "$FREE_M2:-openrouter/free",
+          "$FREE_M1:-openrouter/free",
           "--provider",
           "openrouter",
           "-Q",
@@ -202,7 +202,7 @@
           "-q",
           "{message}",
           "-m",
-          "$FREE_M3:-openrouter/free",
+          "$FREE_M2:-openrouter/free",
           "--provider",
           "openrouter",
           "-Q",
