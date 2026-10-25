@@ -2,6 +2,20 @@
 
 A multi-agent orchestration framework for routing tasks across specialized agents, tools, and integrations.
 
+## 🧠 Shared Brain
+
+সব এজেন্টের জন্য একটাই নির্দেশনা-ফাইল: **[`AGENTS.md`](AGENTS.md)** (ZAYAN GLOBAL BRAIN v1.0)।
+
+| এজেন্ট | কোথা থেকে পড়ে |
+|---|---|
+| Claude Code | `CLAUDE.md` → `AGENTS.md` |
+| OpenCode / Codex / Hermes | `AGENTS.md` (নিজে থেকেই) |
+| Cline | `.clinerules` → `AGENTS.md` |
+| Gemini CLI | `GEMINI.md` → `AGENTS.md` |
+| GitHub Copilot | `.github/copilot-instructions.md` |
+
+> নিয়ম বদলাতে হলে **শুধু `AGENTS.md`** বদলান — বাকিগুলো কেবল পয়েন্টার।
+
 **ব্রেইন এখানেই থাকে** — রাউটার কোড এই রিপোতে, GitHub Actions এ চলে।
 পিসি, সার্ভার বা কার্ড কিছুই লাগে না। এজেন্টরা কাজ করে ওদের নিজের জায়গায়।
 
