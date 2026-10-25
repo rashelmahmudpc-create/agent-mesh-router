@@ -171,10 +171,14 @@ class Router:
         asked = clean_prompt(message) or message
         return f"{asked}{QUICK_HINT}"
 
-    def direct(self, message: str) -> list[Reply]:
+    def direct(self, message: str, only: Iterable[str] | None = None) -> list[Reply]:
         message = self._quick(message)
+        # 🎯 অ্যাপে কাউকে বেছে নিলে শুধু তাকেই ডাকি — অন্যের কাছে চুপচাপ চলে যাই না
+        allowed = {n.lower() for n in only} if only else None
         out: list[Reply] = []
         for name in self.classify(message):
+            if allowed is not None and name.lower() not in allowed:
+                continue
             reply = self._emit(self.call(name, message, "owner"))
             out.append(reply)
             if reply.ok:
@@ -184,12 +188,19 @@ class Router:
         for spec in self.config.chat_agents():
             if spec.name.lower() in tried:
                 continue
-            if len(out) >= 3:
+            if allowed is not None and spec.name.lower() not in allowed:
+                continue
+            if allowed is None and len(out) >= 3:
                 break
             reply = self._emit(self.call(spec.name, message, "owner"))
             out.append(reply)
             if reply.ok:
                 break
+        # বেছে নেওয়া কেউ ডাকা না পড়লে (নাম ভুল) — তবু কিছু একটা হোক
+        if allowed is not None and not out:
+            for name in sorted(allowed):
+                if self.config.get(name):
+                    out.append(self._emit(self.call(name, message, "owner")))
         return out
 
     # ---------- মোড ২: গ্রুপ ----------
@@ -213,10 +224,19 @@ class Router:
                 collected[futures.index(fut)] = self._emit(reply)
             return [r for r in collected if r is not None]
 
-    def group(self, message: str, history: str = "") -> list[Reply]:
-        """সবাইকে ডাকা হয়; `history` হলে (Issue এর পুরনো কথা) সেটাও পড়ে।"""
+    def group(self, message: str, history: str = "", only: Iterable[str] | None = None) -> list[Reply]:
+        """সবাইকে ডাকা হয়; `history` হলে (Issue এর পুরনো কথা) সেটাও পড়ে।
+
+        `only` দিলে শুধু ওই এজেন্টরাই উত্তর দেয় (অ্যাপের ড্রপ-ডাউনে বাছা তালিকা)।
+        """
         message = self._quick(message)
-        targets: list[tuple[str, str]] = [(spec.name, "owner") for spec in self.config.chat_agents()]
+        # 🎯 বাছা থাকলে শুধু তারাই — না থাকলে সবার চ্যাট-এজেন্ট
+        allowed = {n.lower() for n in only} if only else None
+        targets: list[tuple[str, str]] = [
+            (spec.name, "owner")
+            for spec in self.config.chat_agents()
+            if allowed is None or spec.name.lower() in allowed
+        ]
         known = self.config.names()
         collected: list[Reply] = []
         context = history.strip()
@@ -254,6 +274,8 @@ class Router:
                 for mention in find_mentions(reply.text, known):
                     if mention == reply.agent.lower():
                         continue
+                    if allowed is not None and mention not in allowed:
+                        continue  # 🎯 বাছা হয়নি — অ্যাপের নির্দেশ মানি
                     pair = (mention, reply.agent.lower())
                     if pair not in next_targets:
                         next_targets.append(pair)

@@ -176,6 +176,19 @@ body.kb #composer{padding-bottom:8px}
 .pop{position:absolute;left:14px;bottom:calc(100% - 4px);background:var(--surface2);border:1px solid var(--line);border-radius:20px;padding:6px;min-width:190px;box-shadow:0 18px 50px -12px rgba(0,0,0,.6);animation:rise .18s ease both;z-index:6}
 .pop button{display:flex;align-items:center;gap:13px;width:100%;padding:12px 14px;border-radius:14px;font-size:16px;text-align:left}
 .pop button:active{background:var(--surface)}
+/* 🎯 কে উত্তর দেবে — এক/একাধিক টিক দেওয়া যায় */
+.pickbar{display:flex;align-items:center;gap:6px;margin:0 0 6px 6px}
+.pickbtn{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13.5px;color:var(--muted);max-width:76vw}
+.pickbtn b{color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pickbtn.on{border-color:var(--accent);color:var(--text)}
+.pickbtn .ar{font-size:11px}
+#agentPick{bottom:calc(100% + 8px);left:6px;min-width:250px;max-width:88vw;max-height:min(58vh,420px);overflow:auto;padding:8px}
+#agentPick .ph{padding:8px 12px 6px;font-size:12.5px;color:var(--muted)}
+#agentPick button.pk{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:14px;font-size:15.5px;width:100%;text-align:left}
+#agentPick button.pk:active{background:var(--surface)}
+#agentPick button.pk .bx{width:22px;height:22px;border-radius:7px;border:1.5px solid var(--line);display:grid;place-items:center;font-size:13px;color:transparent;flex:none}
+#agentPick button.pk[aria-checked=true] .bx{background:var(--accent);border-color:var(--accent);color:#fff}
+#agentPick button.pk small{margin-left:auto;color:var(--muted);font-size:12px}
 
 /* drawers */
 #scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .25s;z-index:20;backdrop-filter:blur(2px)}
@@ -277,6 +290,15 @@ pre.contract{background:var(--code);border:1px solid var(--line);border-radius:1
         <button data-pick="file"><span data-ic="file"></span>ফাইল</button>
       </div>
       <div id="atts"></div>
+      <div class="pickbar">
+        <button class="pickbtn" id="pickBtn" aria-haspopup="true" aria-expanded="false">
+          <span data-ic="users" data-s="15"></span><b id="pickName">সবাই</b><span class="ar">▾</span>
+        </button>
+      </div>
+      <div class="pop" id="agentPick" hidden>
+        <div class="ph">কাকে উত্তর দিতে বলবেন? একজনে টিক = শুধু সে-ই, একাধিকে টিক = সবাই যাকে টিক দিয়েছেন।</div>
+        <button class="pk" data-pk="all" role="checkbox" aria-checked="true"><span class="bx">✓</span>সবাই <small>পুরো টিম</small></button>
+      </div>
       <div class="box">
         <textarea id="inp" rows="1" placeholder="কিছু লিখুন…" enterkeyhint="send"></textarea>
         <div class="crow">
@@ -459,8 +481,8 @@ const REAL_AGENTS=[
  {id:'claude',name:'Claude Code',role:'প্ল্যান/কোড',emoji:'🟠',color:'#d97757'},
  {id:'hermes',name:'Hermes',role:'ম্যানেজার',emoji:'☤',color:'#8b5cf6'},
  {id:'openhands',name:'OpenHands',role:'অটোমেশন',emoji:'🖐️',color:'#f59e0b'}];
-const APP_V='2026-10-26.1'; // 🔖 সংস্করণ — সেটিংসে দেখা যায়
-const cfg=Object.assign({theme:'dark',accent:'#d97757',fs:17,name:'',server:'',token:'',demo:true,lang:'bn-BD',speak:true,mode:'agent',ghRepo:'rashelmahmudpc-create/agent-mesh-router',ghIssue:'3',ghToken:'',fastMode:true,fastProvider:'groq',fastKey:'',fastModel:'',route:'auto'},lsGet('ax.cfg',{}));
+const APP_V='2026-10-26.2'; // 🔖 সংস্করণ — সেটিংসে দেখা যায়
+const cfg=Object.assign({theme:'dark',accent:'#d97757',fs:17,name:'',server:'',token:'',demo:true,lang:'bn-BD',speak:true,mode:'agent',agents:[],ghRepo:'rashelmahmudpc-create/agent-mesh-router',ghIssue:'3',ghToken:'',fastMode:true,fastProvider:'groq',fastKey:'',fastModel:'',route:'auto'},lsGet('ax.cfg',{}));
 const S={chats:lsGet('ax.chats',[]),cur:null,busy:false,ac:null,atts:[],agents:DEMO_AGENTS,conn:'demo',stick:true,dict:null};
 const ELS=new WeakMap();
 const saveCfg=()=>lsSet('ax.cfg',cfg);
@@ -709,6 +731,67 @@ $('#seg').addEventListener('click',e=>{
 });
 
 
+/* ---------- 🎯 কে উত্তর দেবে (ড্রপ-ডাউন, এক/একাধিক টিক) ---------- */
+// খালি তালিকা = সবাই। একজনে টিক = শুধু সে-ই। একাধিকে টিক = যাদের টিক দিয়েছেন সবাই।
+function pickableAgents(){
+  // আসল mesh এজেন্টরাই আগে (config/agents.json এর সাথে মেলে); সার্ভার থেকে
+  // নতুন তালিকা এলে সেটাও যোগ হয়। ডেমো এজেন্ট দেখানো হয় না — ওরা আসল নয়।
+  const base=[...REAL_AGENTS,...((S.agents&&S.agents!==DEMO_AGENTS)?S.agents:[])];
+  const seen=new Set(),out=[];
+  for(const a of base){
+    if(!a||!a.id||seen.has(a.id))continue;
+    seen.add(a.id);out.push(a);
+  }
+  return out;
+}
+function pickedAgents(){return (Array.isArray(cfg.agents)?cfg.agents:[]).map(String).filter(Boolean)}
+const bnNum=n=>String(n).replace(/[0-9]/g,d=>'০১২৩৪৫৬৭৮৯'[+d]);
+function targetsLabel(){
+  const ids=pickedAgents();
+  if(!ids.length)return 'সবাই';
+  const list=pickableAgents();
+  if(ids.length===1){const a=list.find(x=>x.id===ids[0]);return (a?a.emoji+' ':'')+(a?a.name:ids[0])}
+  return bnNum(ids.length)+' জন';
+}
+function targetsMarker(){const ids=pickedAgents();return ids.length?'targets:'+ids.join(','):''}
+function renderPicker(){
+  const list=pickableAgents(),picked=pickedAgents();
+  $('#agentPick').innerHTML=
+    '<div class="ph">কাকে উত্তর দিতে বলবেন? একজনে টিক = শুধু সে-ই, একাধিকে টিক = যাদের টিক দিয়েছেন সবাই।</div>'
+    +'<button class="pk" data-pk="all" role="checkbox" aria-checked="'+(picked.length?'false':'true')+'"><span class="bx">✓</span>সবাই <small>পুরো টিম</small></button>'
+    +list.map(a=>`<button class="pk" data-pk="${esc(a.id)}" role="checkbox" aria-checked="${picked.includes(a.id)}"><span class="bx">✓</span>${esc(a.emoji||'🤖')} ${esc(a.name)}<small>${esc(a.role||'')}</small></button>`).join('');
+  $('#pickName').textContent=targetsLabel();
+  $('#pickBtn').classList.toggle('on',picked.length>0);
+}
+function togglePick(id){
+  if(!id||id==='all'){cfg.agents=[]}
+  else{
+    const set=new Set(pickedAgents());
+    if(set.has(id))set.delete(id);else set.add(id);
+    cfg.agents=[...set];
+  }
+  saveCfg();renderPicker();
+  toast(pickedAgents().length?'🎯 উত্তর দেবে: '+targetsLabel():'🎯 সবাই উত্তর দেবে');
+}
+const pickPanel=$('#agentPick');
+$('#pickBtn').onclick=e=>{
+  e.stopPropagation();
+  const open=pickPanel.hidden;
+  pickPanel.hidden=!open;
+  $('#pickBtn').setAttribute('aria-expanded',String(open));
+  if(open)renderPicker();
+};
+pickPanel.addEventListener('click',e=>{
+  e.stopPropagation();   // ✅ প্যানেল খোলা রাখি — রি-রেন্ডারে বাটন ডিটাচ হয়, নইলে বন্ধ হয়ে যায়
+  const b=e.target.closest('[data-pk]');if(!b)return;
+  togglePick(b.dataset.pk);
+  if(!pickedAgents().length)pickPanel.hidden=true;
+});
+document.addEventListener('click',e=>{
+  if(!e.target.isConnected)return;   // পুরনো (রি-রেন্ডার হওয়া) বাটনের ক্লিক ধরি না
+  if(!pickPanel.hidden&&!e.target.closest('#agentPick')&&!e.target.closest('#pickBtn'))pickPanel.hidden=true;
+});
+
 /* ---------- composer ---------- */
 function autosize(){inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,200)+'px'}
 function updMain(){
@@ -799,7 +882,7 @@ async function netRun(req,onEv,sig){
     .filter(m=>m&&m.text&&m.role!=='agent')
     .slice(0,-1).slice(-8)
     .map(m=>({role:m.role==='user'?'user':'assistant',text:m.text.slice(0,600)}));
-  const body={chat_id:req.chat.id,mode:req.mode,message:req.text,attachments:req.uploaded,voice:!!req.voice,lang:cfg.lang,history:hist};
+  const body={chat_id:req.chat.id,mode:req.mode,message:req.text,attachments:req.uploaded,voice:!!req.voice,lang:cfg.lang,history:hist,agents:pickedAgents()};
   const r=await fetch(base()+'/api/chat',{method:'POST',headers:hdr(true),body:JSON.stringify(body),signal:sig});
   if(!r.ok)throw new Error('সার্ভার থেকে ত্রুটি ('+r.status+')');
   const ct=r.headers.get('content-type')||'';
@@ -834,7 +917,7 @@ async function ghRun(req,onEv,sig){
   const names=(req.atts||[]).map(a=>a.name).filter(Boolean);
   onEv({type:'status',text:'GitHub Issue-এ পাঠাচ্ছি…'});
   const r=await fetch(ghApi(`/issues/${issue}/comments`),{method:'POST',headers:ghHdr(true),signal:sig,
-    body:JSON.stringify({body:`@mesh ${req.text}${names.length?`\n\n📎 ${names.join(', ')}`:''}\n\n<!-- app:${Date.now()} mode:${req.mode==='group'?'group':'agent'} -->`})});
+    body:JSON.stringify({body:`@mesh ${req.text}${names.length?`\n\n📎 ${names.join(', ')}`:''}\n\n<!-- app:${Date.now()} mode:${req.mode==='group'?'group':'agent'} ${targetsMarker()} -->`})});
   if(!r.ok)throw new Error(`GitHub HTTP ${r.status}`+(r.status===401?' — টোকেন ভুল/মেয়াদ শেষ':r.status===403?' — Issues: Write পারমিশন দিন':r.status===404?' — রিপো/Issue নম্বর দেখুন':''));
   onEv({type:'status',text:'পাঠানো হয়েছে — Actions চলছে (৩–৯ মিনিট লাগতে পারে)…'});
   onEv({type:'thinking',text:'ম্যানেজার কাজটা ভাগ করছে…'});
@@ -912,6 +995,22 @@ function fastHistory(chat){
 async function fastRun(req,onEv,sig){
   onEv({type:'status',text:'⚡ দ্রুত মোড — সেকেন্ডেই উত্তর আসবে'});
   const hist=fastHistory(req.chat);
+  // 🎯 স্যার যাদের বেছে নিয়েছেন তারাই উত্তর দেবে (না বাছলে সবাই)
+  const picked=req.agents&&req.agents.length?REAL_AGENTS.filter(a=>req.agents.includes(a.id)):[];
+  const want=req.mode==='group'?picked:[];   // 👥 গ্রুপে = বাছা সবাই, 👤 এজেন্টে = একজন
+  if(req.mode==='group'&&want.length){
+    want.forEach(a=>onEv({type:'typing',agent:a}));
+    await Promise.all(want.map(async a=>{
+      const id='f-'+a.id;
+      try{
+        await fastCall([{role:'system',content:`${FAST_SYS} এই মুহূর্তে তুমি "${a.name}" (${a.role}) — নিজের ভূমিকা থেকে ২–৪ লাইনে বলো।`},...hist,{role:'user',content:req.text}],
+          t=>onEv({type:'agent_message',id,agent:a,delta:t}),sig);
+      }catch(e){
+        onEv({type:'agent_message',id,agent:a,text:'❌ '+e.message});
+      }
+    }));
+    return;
+  }
   if(req.mode==='group'){
     // তিন ভূমিকায় একসাথে (parallel) উত্তর — তাই সবার লেখা প্রায় একসাথে আসে
     const team=DEMO_AGENTS.slice(0,3);
@@ -989,7 +1088,7 @@ async function sendMessage(text,opts={}){
     let uploaded=[];
     if(!isDemo()&&!isGh()&&atts.length){if(ctx.m){ctx.m.status='ফাইল আপলোড হচ্ছে…';refreshAI(ctx.m)}uploaded=await uploadAll(atts,sig)}
     const run=fastOn()?fastRun:isDemo()?demoRun:isGh()?ghRun:netRun;
-    await run({text,uploaded,mode:cfg.mode,chat,voice:opts.voice,atts},ev=>handleEv(ev,ctx),sig);
+    await run({text,uploaded,mode:cfg.mode,chat,voice:opts.voice,atts,agents:pickedAgents()},ev=>handleEv(ev,ctx),sig);
   }catch(e){
     if(e.name==='AbortError'){if(ctx.m&&ctx.m.text)ctx.m.text+='\n\n_— থামানো হয়েছে_'}
     else{const msg=(e.message||'সংযোগে সমস্যা')+(fastOn()?' — ⚡ API কী/মডেল দেখুন':isDemo()?'':isGh()?' — GitHub টোকেন/রিপো/Issue দেখুন':' — সার্ভারের ঠিকানা/টোকেন দেখুন');if(ctx.m)ctx.m.err=msg;else toast(msg)}
@@ -1049,6 +1148,17 @@ async function demoRun(req,onEv,sig){
 }
 const agById=id=>S.agents.find(a=>a.id===id)||DEMO_AGENTS.find(a=>a.id===id)||DEMO_AGENTS[0];
 async function demoGroup(req,onEv,sig,simple){
+  // 🎯 কাউকে বেছে নিলে ডেমোতেও শুধু সে-ই উত্তর দেয়
+  const picked=(req.agents&&req.agents.length)?REAL_AGENTS.filter(a=>req.agents.includes(a.id)):[];
+  if(picked.length){
+    for(const ag of picked){
+      onEv({type:'typing',agent:ag});await sleep(500,sig);
+      const line=simple?`${ag.emoji} আমি ${ag.name} — ডেমো মোডে উত্তর দিচ্ছি (আসল উত্তর পেতে এজেন্টরা GitHub-এ চলে)।`
+        :`${ag.emoji} **${ag.name}** — ডেমো নমুনা উত্তর। আসল ${ag.role} উত্তর পেতে Settings → route GitHub/Worker করে নিন।`;
+      const mid=uid();await streamText(line,t=>onEv({type:'agent_message',id:mid,agent:ag,delta:t}),sig,4,14);
+    }
+    return;
+  }
   const script=simple?[
     ['mgr','ওয়ালাইকুম আসসালাম! 👋 আমি ম্যানেজার, টিমের সবাই এখানে আছি।'],
     ['res','আমি তথ্য খোঁজার দায়িত্বে 🔎 — যা জানতে চান বলুন।'],
@@ -1212,7 +1322,9 @@ $('#sExport').onclick=async()=>{
 $('#sClear').onclick=()=>{if(confirm('সব চ্যাট মুছে ফেলবেন?')){S.chats=[];S.cur=null;saveChats();renderFeed();renderList();closeDrawers()}};
 const CONTRACT=`POST  {server}/api/chat        (Authorization: Bearer <token>)
 body: {chat_id, mode:"agent"|"group", message,
-       attachments:[{id,name,type,url}], voice, lang}
+       attachments:[{id,name,type,url}], voice, lang,
+       history:[{role,text}],                 আগের কয়েক কথা
+       agents:["opencode","hermes"]}          🎯 কে উত্তর দেবে (খালি/বাদ = সবাই)
 reply: SSE ("data: {json}") বা NDJSON, প্রতি লাইনে একটা ইভেন্ট
 
 {"type":"status","text":"…"}                    লাইভ লাইন
@@ -1232,7 +1344,7 @@ $('#contract').textContent=CONTRACT;
 $('#cCopy').onclick=()=>copyText(CONTRACT);
 
 /* ---------- boot ---------- */
-paintIcons();applyTheme();buildSettings();setModeUI();updMain();fit();
+paintIcons();applyTheme();buildSettings();setModeUI();renderPicker();updMain();fit();
 S.cur=null;renderFeed();renderList();paintConn();ping();
 try{speechSynthesis.getVoices()}catch{}
 document.addEventListener('gesturestart',e=>e.preventDefault());

@@ -365,8 +365,16 @@ function cleanAnswer(text) {
     .slice(0, 1600);
 }
 
-/** 🤖 কোন এজেন্ট উত্তর দেবে — agent মোডে একজনই */
-function pickPersona(message, mode) {
+/** 🤖 কোন এজেন্ট উত্তর দেবে — agent মোডে একজনই; drop-down এ বাছা থাকলে শুধু তারাই */
+function pickPersona(message, mode, agents) {
+  // 🎯 অ্যাপের drop-down: একজনে টিক = শুধু সে, একাধিকে = সবাই
+  const want = (Array.isArray(agents) ? agents : [])
+    .map((x) => String(x || "").trim().toLowerCase())
+    .filter(Boolean);
+  if (want.length) {
+    const chosen = PERSONAS.filter((p) => want.includes(p.id));
+    if (chosen.length) return mode === "group" ? chosen : [chosen[0]];
+  }
   if (mode === "group") return PERSONAS.slice();
   const low = String(message || "").toLowerCase();
   const rules = [
@@ -469,7 +477,7 @@ async function handleFastChat(env, ctx, payload) {
     .filter((h) => h && typeof h.text === "string" && h.text.trim())
     .slice(-6)
     .map((h) => ({ role: h.role === "assistant" ? "assistant" : "user", content: h.text.slice(0, 600) }));
-  const picked = pickPersona(text, mode);
+  const picked = pickPersona(text, mode, payload?.agents);
   const startedAt = Date.now();
 
   return sse(env, async (send) => {
@@ -550,11 +558,17 @@ async function handleChat(request, env, ctx) {
     .slice(-4)
     .map((h) => `- ${h.role === "assistant" ? "এজেন্ট" : "স্যার"}: ${h.text.replace(/\s+/g, " ").trim().slice(0, 240)}`);
   const memory = past.length ? `\n\n[আগের কথা]\n${past.join("\n")}` : "";
+  // 🎯 স্যার যাদের বেছে নিয়েছেন (drop-down) — মার্কারে যায়, Actions শুধু তাদেরই ডাকে
+  const targets = (Array.isArray(payload?.agents) ? payload.agents : [])
+    .map((x) => String(x || "").trim().toLowerCase())
+    .filter((x) => /^[a-z0-9_-]{1,24}$/.test(x))
+    .slice(0, 8);
+  const want = targets.length ? ` targets:${targets.join(",")}` : "";
   // 🏷️ মার্কারে mode থাকে — Actions রান এটা পড়ে direct/group ঠিক করে
   const tag = mode === "group" ? "group" : "agent";
   const body =
     `@mesh ${text}${names.length ? `\n\n📎 ${names.join(", ")}` : ""}` +
-    `${memory}\n\n<!-- app:${Date.now()} mode:${tag} -->`;
+    `${memory}\n\n<!-- app:${Date.now()} mode:${tag}${want} -->`;
 
   return sse(env, async (send) => {
     send({ type: "status", text: "এজেন্টদের ডেকে পাঠাচ্ছি…" });
