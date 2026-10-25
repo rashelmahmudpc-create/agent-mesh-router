@@ -116,7 +116,7 @@ def model_responds(model_id: str, api_key: str, timeout: int = 25) -> bool:
 def discover_usable(
     limit: int = 3,
     api_key: str = "",
-    tries: int = 8,
+    tries: int = 3,
     timeout: int = 30,
     fetcher=None,
     checker=None,
