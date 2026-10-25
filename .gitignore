@@ -2,4 +2,8 @@ __pycache__/
 *.pyc
 .mesh/
 mesh-output.txt
+doctor.txt
+team.txt
+status.md
+report.md
 .venv/
