@@ -80,6 +80,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--list", action="store_true", help="টিমের তালিকা দেখাও")
     parser.add_argument("--doctor", action="store_true", help="সব ঠিক আছে কি না দেখাও")
     parser.add_argument("--probe", action="store_true", help="প্রতিটা এজেন্টকে একটা ছোট প্রশ্ন করে দেখো কে সাড়া দেয়")
+    parser.add_argument(
+        "--free-model", action="store_true", help="এখন কোন মডেল সত্যিই ফ্রি — OpenRouter তালিকা থেকে বলে দাও"
+    )
     args = parser.parse_args(argv)
 
     config = MeshConfig.load(args.config)
@@ -92,6 +95,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         _print_list(config)
         return 0
+
+    if args.free_model:
+        from .models import discover
+
+        model = discover()
+        if model:
+            print(model)
+            return 0
+        print("⚠️ ফ্রি মডেল পাওয়া যায়নি (নেটওয়ার্ক বা তালিকা বদলেছে)", file=sys.stderr)
+        return 1
 
     if args.probe:
         return _probe(config, dry_run=args.dry_run, strict=args.strict)
