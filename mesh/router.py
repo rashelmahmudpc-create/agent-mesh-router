@@ -92,7 +92,33 @@ class Router:
 
     # ---------- একটা এজেন্টকে ডাকা ----------
 
-    def call(self, name: str, message: str, sender: str = "owner") -> Reply:
+    def _memory(self) -> str:
+        """লোকাল ট্রান্সক্রিপ্টের সংক্ষিপ্ত স্মৃতি — পরের রান আগের কথা জানে।
+
+        কারণ: আগে Store-এ সব লেখা হচ্ছিল কিন্তু কেউ ফিরে পড়ত না —
+        CLI-তে প্রতিবার এজেন্ট মনে করত স্যার প্রথমবার ডাকছেন। 😅
+        """
+        try:
+            return self.store.transcript_text(limit=8).strip()
+        except Exception:  # স্মৃতি না পেলেও রান থামবে না
+            return ""
+
+    def _remember(self, asked: str) -> str:
+        """স্মৃতি আগে, নতুন প্রশ্ন শেষে — নইলে এজেন্ট পুরনো আলোচনার সারমর্ম লিখে দেয়।
+
+        অ্যাপ নিজে `[আগের কথা]` পাঠালে (slow lane) সেটাই রাখি — দুবার না দিই।
+        """
+        memory = self._memory()
+        if not memory or "[আগের কথা]" in asked:
+            return asked
+        return (
+            "[আগের কথা — শুধু পটভূমি, এর সারমর্ম দিও না]\n"
+            f"{memory}\n\n"
+            "[স্যারের নতুন কথা — শুধু এই প্রশ্নের উত্তর দাও]\n"
+            f"{asked}"
+        )
+
+    def call(self, name: str, message: str, sender: str = "owner", ask: str | None = None) -> Reply:
         ok, reason = self._can_call(name, sender)
         spec = self.config.get(name)
         if not ok or spec is None:
@@ -113,7 +139,15 @@ class Router:
         self.log(f"→ {spec.display()} কে পাঠানো হচ্ছে")
         reply = adapter.send(message, sender)
         self.store.append(
-            {"mode": "call", "agent": name, "sender": sender, "ok": reply.ok, "text": reply.text[:2000]}
+            {
+                "mode": "call",
+                "agent": name,
+                "sender": sender,
+                "ok": reply.ok,
+                # প্রশ্নটাও জমা রাখি — নইলে পরের রানে শুধু উত্তর থাকে, প্রশ্ন নেই
+                "ask": (ask if ask is not None else message)[:2000],
+                "text": reply.text[:2000],
+            }
         )
         if reply.ok and spec.daily_limit:
             # কোটা-খরচা এজেন্ট: হিসাবটা repo-তে লিখি, যাতে পরের রানও জানে
@@ -172,14 +206,16 @@ class Router:
         return f"{asked}{QUICK_HINT}"
 
     def direct(self, message: str, only: Iterable[str] | None = None) -> list[Reply]:
-        message = self._quick(message)
+        # 🧠 পরিষ্কার প্রশ্ন (ask) আলাদা রাখি — স্মৃতিতে কাঁচা মার্কার/নির্দেশ নয়, আসল কথা জমা হয়
+        clean = clean_prompt(message) or message
+        asked = self._quick(message)
         # 🎯 অ্যাপে কাউকে বেছে নিলে শুধু তাকেই ডাকি — অন্যের কাছে চুপচাপ চলে যাই না
         allowed = {n.lower() for n in only} if only else None
         out: list[Reply] = []
-        for name in self.classify(message):
+        for name in self.classify(asked):
             if allowed is not None and name.lower() not in allowed:
                 continue
-            reply = self._emit(self.call(name, message, "owner"))
+            reply = self._emit(self.call(name, self._remember(asked), "owner", ask=clean))
             out.append(reply)
             if reply.ok:
                 return out
@@ -192,7 +228,7 @@ class Router:
                 continue
             if allowed is None and len(out) >= 3:
                 break
-            reply = self._emit(self.call(spec.name, message, "owner"))
+            reply = self._emit(self.call(spec.name, self._remember(asked), "owner", ask=clean))
             out.append(reply)
             if reply.ok:
                 break
@@ -200,12 +236,12 @@ class Router:
         if allowed is not None and not out:
             for name in sorted(allowed):
                 if self.config.get(name):
-                    out.append(self._emit(self.call(name, message, "owner")))
+                    out.append(self._emit(self.call(name, self._remember(asked), "owner", ask=clean)))
         return out
 
     # ---------- মোড ২: গ্রুপ ----------
 
-    def _dispatch(self, targets: list[tuple[str, str]], message: str) -> list[Reply]:
+    def _dispatch(self, targets: list[tuple[str, str]], message: str, ask: str = "") -> list[Reply]:
         """(এজেন্ট, কে ডাকছে) জোড়াগুলোকে একসাথে (parallel) ডাকে।"""
         runnable: list[tuple[str, str]] = []
         for name, sender in targets:
@@ -217,7 +253,7 @@ class Router:
             return []
         # যার উত্তর আগে আসে, সে-ই আগে Issue-এ যাবে (অ্যাপে দ্রুত দেখা যাবে)
         with ThreadPoolExecutor(max_workers=min(8, len(runnable))) as pool:
-            futures = [pool.submit(self.call, name, message, sender) for name, sender in runnable]
+            futures = [pool.submit(self.call, name, message, sender, ask) for name, sender in runnable]
             collected: list[Reply | None] = [None] * len(futures)
             for fut in as_completed(futures):
                 reply = fut.result()
@@ -229,6 +265,8 @@ class Router:
 
         `only` দিলে শুধু ওই এজেন্টরাই উত্তর দেয় (অ্যাপের ড্রপ-ডাউনে বাছা তালিকা)।
         """
+        # 🧠 স্মৃতিতে আসল প্রশ্নটা জমা হওয়ার জন্য কাঁচা মার্কার-মুক্ত রূপ আলাদা করি
+        clean = clean_prompt(message) or message
         message = self._quick(message)
         # 🎯 বাছা থাকলে শুধু তারাই — না থাকলে সবার চ্যাট-এজেন্ট
         allowed = {n.lower() for n in only} if only else None
@@ -239,7 +277,8 @@ class Router:
         ]
         known = self.config.names()
         collected: list[Reply] = []
-        context = history.strip()
+        # Issue-এর হলঘর না পেলে (লোকাল রান) নিজের ট্রান্সক্রিপ্ট থেকেই পটভূমি নিই
+        context = history.strip() or self._memory()
 
         for round_no in range(self.config.settings.max_rounds):
             if not targets:
@@ -260,7 +299,7 @@ class Router:
                     f"[স্যারের নতুন কথা — এটারই উত্তর দাও]\n{message}"
                 )
             self.log(f"— রাউন্ড {round_no + 1}: {', '.join(name for name, _ in targets)}")
-            round_replies = self._dispatch(targets, prompt)
+            round_replies = self._dispatch(targets, prompt, ask=clean)
             if not round_replies:
                 break
             collected.extend(round_replies)
