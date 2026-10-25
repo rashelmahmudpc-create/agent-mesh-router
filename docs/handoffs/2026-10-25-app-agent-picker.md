@@ -1,5 +1,6 @@
 # Handoff — 🎯 app picker: শুধু বাছা এজেন্টরা উত্তর দেবে (2026-10-25)
 
+**PR:** 👉 https://github.com/rashelmahmudpc-create/agent-mesh-router/pull/64 (CI ✓, mergeable)
 **Asked:** "সবাই কেনো উত্তর দিচ্ছে বুঝলাম না — drop-down থেকে যে এজেন্ট সিলেক্ট করবো শুধু সে উত্তর দিবে, মাল্টিপল করলে মাল্টিপল দিবে"
 **Priority:** 3 (AI-agent infrastructure)
 **Role:** worker
@@ -56,7 +57,8 @@ $ python3 -m mesh.cli '@mesh আজ কী করবো?\n<!-- app:1 mode:agent 
 
 ## Still open
 
-- অ্যাপ থেকে সত্যিকারের একটা প্রশ্নে দেখতে হবে (merge + deploy এর পর)।
+- **স্যারের কাজ:** PR **#64** মার্জ করে অ্যাপ রিফ্রেশ করুন → composer-এর উপরে "সবাই ▾" চিপ দেখবেন।
+- merge + deploy এর পর সত্যিকারের একটা প্রশ্নে যাচাই করতে হবে।
 - workflow-এর ছোট প্যাচ (`.github/workflows/mesh.yml`) তখনো **push করা হয়নি** — প্যাচটা
   `docs/handoffs/2026-10-25-app-relevance.md` এ আছে; দরকার নেই, `mesh/cli.py` নিজেই কাজটা করে।
 
