@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
@@ -32,6 +33,7 @@ PROBES: dict[str, tuple[str, str]] = {
     "OPENROUTER_API_KEY": ("bearer", "https://openrouter.ai/api/v1/key"),
     "GROQ_API_KEY": ("bearer", "https://api.groq.com/openai/v1/models"),
     "VERCEL_AI_GATEWAY": ("bearer", "https://ai-gateway.vercel.sh/v1/models"),
+    "VERCEL_AI_GETAWAY": ("bearer", "https://ai-gateway.vercel.sh/v1/models"),  # বানানের ভিন্নতা
     # gemini → URL এ ?key=
     "GEMINI_API_KEY": ("gemini", "https://generativelanguage.googleapis.com/v1beta/models"),
     "GOOGLE_API_KEY": ("gemini", "https://generativelanguage.googleapis.com/v1beta/models"),
@@ -53,8 +55,21 @@ OUT_OF_SCOPE = (
 )
 
 
+UA = "agent-mesh-router/0.1 (+https://github.com/rashelmahmudpc-create/agent-mesh-router)"
+
+
+def base_name(name: str) -> str:
+    """OPENROUTER_API_KEY_2 → OPENROUTER_API_KEY"""
+    return re.sub(r"_\d+$", "", name)
+
+
+def build_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
+    """সব request এ UA + Accept — কিছু provider (Groq/Cloudflare) UA ছাড়া 403 দেয়।"""
+    return {"User-Agent": UA, "Accept": "application/json", **(extra or {})}
+
+
 def _request(url: str, headers: dict[str, str], timeout: int = 25) -> tuple[int, str]:
-    req = urllib.request.Request(url, headers=headers)
+    req = urllib.request.Request(url, headers=build_headers(headers))
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             body = resp.read(4000).decode("utf-8", "replace")
@@ -98,19 +113,20 @@ def _summarize(kind: str, body: str) -> str:
 def check_key(name: str, value: str, opener=_request) -> KeyResult:
     if not value:
         return KeyResult(name, BAD, "খালি / পাওয়া যায়নি")
-    probe = PROBES.get(name)
+    lookup = name if name in PROBES or name in MANUAL_ONLY else base_name(name)
+    probe = PROBES.get(lookup)
     if probe is None:
-        if name in MANUAL_ONLY:
-            return KeyResult(name, MANUAL, MANUAL_ONLY[name])
+        if lookup in MANUAL_ONLY:
+            return KeyResult(name, MANUAL, MANUAL_ONLY[lookup])
         if name.startswith(OUT_OF_SCOPE) or any(name.startswith(p) for p in OUT_OF_SCOPE):
             return KeyResult(name, WARN, "এই রিপোর এজেন্টের সাথে সম্পর্ক নেই (অন্য প্রজেক্ট)")
         return KeyResult(name, MANUAL, "যাচাইয়ের নিয়ম নেই — হাতে দেখতে হবে")
 
     kind, url = probe
     if kind == "gemini":
-        status, body = opener(f"{url}?key={value}", {})
+        status, body = opener(f"{url}?key={value}", build_headers())
     else:
-        status, body = opener(url, {"Authorization": f"Bearer {value}"})
+        status, body = opener(url, build_headers({"Authorization": f"Bearer {value}"}))
 
     if status == 200:
         extra = _summarize(kind, body)

@@ -115,6 +115,7 @@ jobs:
           OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
           CLINE_API_KEY: ${{ secrets.CLINE_API_KEY }}
           VERCEL_AI_GATEWAY: ${{ secrets.VERCEL_AI_GATEWAY }}
+          VERCEL_AI_GETAWAY: ${{ secrets.VERCEL_AI_GETAWAY }}
           CARTESIA_API_KEY: ${{ secrets.CARTESIA_API_KEY }}
           COMPOSIO_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
         run: |
