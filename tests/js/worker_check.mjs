@@ -85,7 +85,8 @@ check("health ঠিক আছে", res.status === 200 && health.ok && health.is
 
 res = await worker.fetch(req("/api/agents", { headers: auth }), env);
 const agents = await res.json();
-check("agents: ৩ জন, চুক্তি অনুযায়ী ফিল্ড", Array.isArray(agents) && agents.length === 3
+check("agents: ৪ জন (OpenHands সহ), চুক্তি অনুযায়ী ফিল্ড", Array.isArray(agents) && agents.length === 4
+  && agents.some((a) => a.id === "openhands")
   && agents.every((a) => a.id && a.name && a.role && a.emoji && a.color), agents.map((a) => a.id).join(","));
 
 res = await worker.fetch(req("/api/nope", { headers: auth }), env);
@@ -131,6 +132,96 @@ check("group: নতুন comment পোস্ট হয়েছে", calls.le
 /* ---- খালি লেখা ---- */
 res = await chatReq({ message: "   " });
 check("খালি লেখা → 400", res.status === 400);
+
+/* ================= ⚡ দ্রুত লেন (Actions ছাড়া) ================= */
+
+const realFetch = globalThis.fetch;
+const llmCalls = [];
+
+globalThis.fetch = async (url, init = {}) => {
+  const u = String(url);
+  const reply = (data, status = 200) =>
+    new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+
+  // 🤖 নকল মডেল API
+  if (u.includes("openrouter.ai") || u.includes("groq.com")) {
+    llmCalls.push({ url: u, init });
+    const model = JSON.parse(init.body).model;
+    return reply({ choices: [{ message: { content: `উত্তর (${model}) — স্যার, কাজ চলছে ✅` } }] });
+  }
+  if (u.includes("generativelanguage.googleapis.com")) {
+    llmCalls.push({ url: u, init });
+    return reply({ candidates: [{ content: { parts: [{ text: "উত্তর (gemini) — স্যার, কাজ চলছে ✅" }] } }] });
+  }
+  // 🐙 GitHub
+  if (u.endsWith("/comments") && init.method === "POST") {
+    postBodies.push(JSON.parse(init.body).body);
+    return reply({ id: 700 }, 201);
+  }
+  if (/\/issues\/\d+$/.test(u)) return reply({ number: 3, title: "hall" });
+  return reply({ message: "not found" }, 404);
+};
+
+const postBodies = [];
+const fastEnv = { ...env, OPENROUTER_API_KEY: "or-test", GROQ_API_KEY: "gq-test", GEMINI_API_KEY: "gm-test" };
+const waiters = [];
+const ctx = { waitUntil: (p) => waiters.push(p) };
+
+const fastChat = async (body) => {
+  const started = Date.now();
+  const response = await worker.fetch(
+    req("/api/chat", {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    fastEnv,
+    ctx,
+  );
+  const evs = await eventsOf(response);
+  const text = evs.filter((e) => e.type === "agent_message").map((e) => e.delta || e.text || "").join("");
+  return { evs, text, ms: Date.now() - started };
+};
+
+{
+  const health = await (await worker.fetch(req("/api/health", { headers: auth }), fastEnv)).json();
+  check("health: fast=true + কোন provider", health.fast === true && health.providers.length === 3, health.providers.join(","));
+}
+
+{
+  const { evs, ms } = await fastChat({ mode: "group", message: "সবাই এক লাইনে বলো" });
+  const speakers = new Set(evs.filter((e) => e.type === "agent_message" && e.agent).map((e) => e.agent.name));
+  check("⚡ দ্রুত লেন: ৪ এজেন্টের উত্তর", evs.filter((e) => e.type === "agent_message").length >= 8,
+    `${evs.filter((e) => e.type === "agent_message").length} ইভেন্ট`);
+  check("⚡ দ্রুত লেন: Actions-এর জন্য Issue-এ @mesh যায়নি", !postBodies.some((b) => b.startsWith("@mesh")));
+  check("⚡ দ্রুত লেন: ৮ সেকেন্ডের কমে উত্তর", ms < 8000, `${ms}ms`);
+  check("⚡ দ্রুত লেন: চারজনই আলাদা করে উত্তর দিয়েছে", ["OpenCode", "Claude Code", "Hermes", "OpenHands"].every((n) => speakers.has(n)), [...speakers].join(","));
+}
+
+await Promise.all(waiters);
+check("⚡ উত্তর Issue-এ comment হয়েছি (পেছনে)", postBodies.filter((b) => b.includes("<!-- mesh:")).length === 4,
+  `${postBodies.filter((b) => b.includes("<!-- mesh:")).length}টা`);
+check("⚡ comment-এ key ফাঁস হয়নি", !/or-test|gq-test|gm-test/.test(JSON.stringify(postBodies)));
+
+{
+  const { ms } = await fastChat({ mode: "agent", message: "কী করবো?" });
+  check("⚡ agent মোডেও দ্রুত", ms < 8000, `${ms}ms`);
+}
+
+{
+  // 🐢 key না থাকলে পুরনো Actions পথেই চলে
+  const oldFetch = globalThis.fetch;
+  globalThis.fetch = realFetch;
+  const slowEnv = { ...env, FAST: "off", OPENROUTER_API_KEY: "x" };
+  const before = calls.length;
+  const response = await worker.fetch(
+    req("/api/chat", { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify({ message: "হাই" }) }),
+    slowEnv,
+  );
+  await eventsOf(response);
+  check("FAST=off → Actions পথ", calls.length > before && llmCalls.length > 0);
+  globalThis.fetch = oldFetch;
+}
 
 fs.rmSync(tmpDir, { recursive: true, force: true });
 
