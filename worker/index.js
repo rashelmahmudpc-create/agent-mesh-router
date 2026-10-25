@@ -253,6 +253,9 @@ const PROVIDERS = {
     url: () => "https://api.groq.com/openai/v1/chat/completions",
     key: (env) => env.GROQ_API_KEY,
     model: (env) => env.FAST_MODEL_GROQ || "llama-3.3-70b-versatile",
+    models: (env) => (env.FAST_MODEL_GROQ
+      ? [env.FAST_MODEL_GROQ]
+      : ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-120b"]),
     headers: (key) => ({ "content-type": "application/json", authorization: `Bearer ${key}` }),
     body: (env, model, system, user) => ({
       model,
@@ -264,8 +267,17 @@ const PROVIDERS = {
   },
   openrouter: {
     url: () => "https://openrouter.ai/api/v1/chat/completions",
-    key: (env) => env.OPENROUTER_API_KEY || env.OPENROUTER_API_KEY_2,
+    key: (env, persona) => {
+      // 🔑 দুইটা OpenRouter key আছে — Hermes দ্বিতীয়টা ব্যবহার করবে (429 ছড়াবে না)
+      const first = env.OPENROUTER_API_KEY || "";
+      const second = env.OPENROUTER_API_KEY_2 || "";
+      if (persona && persona.id === "hermes") return second || first;
+      return first || second;
+    },
     model: (env) => env.FAST_MODEL_OPENROUTER || "openrouter/free",
+    models: (env) => (env.FAST_MODEL_OPENROUTER
+      ? [env.FAST_MODEL_OPENROUTER]
+      : ["openrouter/free", "meta-llama/llama-3.3-70b-instruct:free", "deepseek/deepseek-chat-v3.1:free"]),
     headers: (key) => ({
       "content-type": "application/json",
       authorization: `Bearer ${key}`,
@@ -282,8 +294,12 @@ const PROVIDERS = {
   },
   gemini: {
     url: (env, model) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    // Gemini-র মডেল নাম বদলায় — তাই একাধিক চেষ্টা (উপরের models() দেখুন)
     key: (env) => env.GEMINI_API_KEY,
-    model: (env) => env.FAST_MODEL_GEMINI || "gemini-2.0-flash",
+    model: (env) => env.FAST_MODEL_GEMINI || "gemini-2.5-flash",
+    models: (env) => (env.FAST_MODEL_GEMINI
+      ? [env.FAST_MODEL_GEMINI]
+      : ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]),
     headers: (key) => ({ "content-type": "application/json", "x-goog-api-key": key }),
     body: (env, model, system, user) => ({
       systemInstruction: { parts: [{ text: system }] },
@@ -321,35 +337,40 @@ async function askModel(env, persona, message) {
   const failures = [];
   for (const name of persona.chain) {
     const provider = PROVIDERS[name];
-    const key = provider.key(env);
+    const key = provider.key(env, persona);
     if (!key) {
       failures.push(`${name}: key নেই`);
       continue;
     }
-    const model = provider.model(env);
-    const started = Date.now();
-    try {
-      const res = await fetch(provider.url(env, model), {
-        method: "POST",
-        headers: provider.headers(key),
-        body: JSON.stringify(provider.body(env, model, system, message)),
-        signal: AbortSignal.timeout(timeout),
-      });
-      const raw = await res.text();
-      let data = null;
-      try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
-      if (!res.ok) {
-        failures.push(`${name}: HTTP ${res.status}`);
-        continue;
+    const models = (provider.models ? provider.models(env) : [provider.model(env)]).filter(Boolean);
+    for (const model of models) {
+      const started = Date.now();
+      try {
+        const res = await fetch(provider.url(env, model), {
+          method: "POST",
+          headers: provider.headers(key),
+          body: JSON.stringify(provider.body(env, model, system, message)),
+          signal: AbortSignal.timeout(timeout),
+        });
+        const raw = await res.text();
+        let data = null;
+        try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+        if (!res.ok) {
+          // 🩺 আসল কারণটা ছোট করে রাখি (key কখনো নয়)
+          const why = ((data && data.error && (data.error.message || data.error)) || raw || "")
+            .toString().slice(0, 90);
+          failures.push(`${name}/${model}: HTTP ${res.status}${why ? ` · ${why}` : ""}`);
+          continue; // পরের মডেল
+        }
+        const out = String(provider.parse(data) || "").trim();
+        if (!out) {
+          failures.push(`${name}/${model}: খালি উত্তর`);
+          continue;
+        }
+        return { ok: true, text: out, provider: name, model, ms: Date.now() - started };
+      } catch (err) {
+        failures.push(`${name}/${model}: ${String(err).slice(0, 60)}`);
       }
-      const out = String(provider.parse(data) || "").trim();
-      if (!out) {
-        failures.push(`${name}: খালি উত্তর`);
-        continue;
-      }
-      return { ok: true, text: out, provider: name, model, ms: Date.now() - started };
-    } catch (err) {
-      failures.push(`${name}: ${String(err).slice(0, 60)}`);
     }
   }
   return { ok: false, text: "", provider: "", ms: 0, failures };
