@@ -1,0 +1,401 @@
+"""মেশের মূল পরীক্ষা — ইন্টারনেট বা API key ছাড়াই চলে।
+
+    python3 -m unittest discover -s tests -v
+"""
+
+from __future__ import annotations
+
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from mesh.adapters import CliAdapter  # noqa: E402
+from mesh.chat import Store  # noqa: E402
+from mesh.config import AgentSpec, MeshConfig  # noqa: E402
+from mesh.router import Router  # noqa: E402
+from mesh.textutil import find_mentions, looks_like_quota_problem  # noqa: E402
+
+
+class FakeRunner:
+    """সত্যিকারের কমান্ড চালায় না — শুধু উত্তর ফিরিয়ে দেয়।"""
+
+    def __init__(self, script=None):
+        self.calls = []
+        self.script = script or {}
+
+    def __call__(self, cmd, env, cwd, timeout):
+        self.calls.append((tuple(cmd), dict(env)))
+        name = cmd[0]
+        resp = self.script.get(name)
+        if callable(resp):
+            return resp(cmd, env, len(self.calls))
+        if isinstance(resp, tuple):
+            return resp
+        return 0, f"{name} বলছে: ঠিক আছে", ""
+
+    def names(self):
+        return [c[0][0] for c in self.calls]
+
+
+def make_router(runner=None, tmp=None, **kwargs):
+    config = MeshConfig.load()
+    store = Store(Path(tmp or tempfile.mkdtemp()) / "transcript.jsonl")
+    return Router(config, runner=runner or FakeRunner(), store=store, workdir=".", **kwargs)
+
+
+class TextUtilTest(unittest.TestCase):
+    def test_find_mentions_keeps_order_and_filters(self):
+        text = "@Claude দেখো, আর @cline কে বলো — @unknown বাদ"
+        self.assertEqual(find_mentions(text, ["claude", "cline"]), ["claude", "cline"])
+
+    def test_quota_markers(self):
+        self.assertTrue(looks_like_quota_problem("Error 429: rate limit exceeded"))
+        self.assertFalse(looks_like_quota_problem("all tests passed"))
+
+
+class ConfigTest(unittest.TestCase):
+    def test_team_loaded(self):
+        config = MeshConfig.load()
+        names = config.names()
+        for expected in ("opencode", "cline", "claude", "hermes", "openhands"):
+            self.assertIn(expected, names)
+
+    def test_hermes_is_worker_not_manager(self):
+        hermes = MeshConfig.load().get("hermes")
+        self.assertEqual(hermes.kind, "cli")
+        self.assertTrue(hermes.has_role("worker"))
+
+    def test_openhands_not_in_group_chat(self):
+        config = MeshConfig.load()
+        self.assertNotIn("openhands", [a.name for a in config.chat_agents()])
+
+
+class ClassifyTest(unittest.TestCase):
+    def test_mention_wins(self):
+        router = make_router()
+        self.assertEqual(router.classify("@claude এই আর্কিটেকচার দেখো"), ["claude"])
+
+    def test_keyword_match(self):
+        router = make_router()
+        self.assertEqual(router.classify("এই bug টা ঠিক করো"), ["opencode"])
+
+    def test_default_when_nothing_matches(self):
+        router = make_router()
+        self.assertEqual(router.classify("আজ কেমন আছো"), ["opencode"])
+
+
+class DirectModeTest(unittest.TestCase):
+    def test_calls_only_one_agent(self):
+        runner = FakeRunner()
+        router = make_router(runner)
+        replies = router.direct("এই bug টা ঠিক করো")
+        self.assertEqual(runner.names(), ["opencode"])
+        self.assertTrue(replies[0].ok)
+        self.assertEqual(router.calls, 1)
+
+    def test_falls_back_when_first_fails(self):
+        runner = FakeRunner({"opencode": (1, "", "boom")})
+        router = make_router(runner)
+        replies = router.direct("এই bug টা ঠিক করো")
+        self.assertTrue(any(r.ok for r in replies))
+        self.assertGreaterEqual(len(runner.calls), 2)
+
+
+class GroupModeTest(unittest.TestCase):
+    def test_fanout_to_all_chat_agents(self):
+        runner = FakeRunner()
+        router = make_router(runner)
+        router.group("হাই")
+        self.assertCountEqual(runner.names(), ["opencode", "cline", "claude", "hermes"])
+        self.assertNotIn("openhands", runner.names())
+
+    def test_mention_triggers_reply_in_next_round(self):
+        def hermes(cmd, env, n):
+            return 0, "আমি হের্মস — @claude তুমি কী বলো?", ""
+
+        runner = FakeRunner({"hermes": hermes})
+        router = make_router(runner)
+        router.group("হাই")
+        self.assertEqual(runner.names().count("claude"), 2)  # রাউন্ড ১ + ডাকা হয়ে রাউন্ড ২
+
+    def test_round_cap_protects_against_loop(self):
+        def pingpong(cmd, env, n):
+            other = "cline" if cmd[0] == "opencode" else "opencode"
+            return 0, f"@{other} আবার বলো", ""
+
+        runner = FakeRunner({"opencode": pingpong, "cline": pingpong})
+        router = make_router(runner)
+        router.group("হাই")
+        self.assertLessEqual(router.calls, router.config.settings.max_calls_per_run)
+
+    def test_budget_stops_everything(self):
+        runner = FakeRunner()
+        router = make_router(runner)
+        router.config.settings.max_calls_per_run = 2
+        router.group("হাই")
+        self.assertEqual(router.calls, 2)
+
+    def test_pair_limit(self):
+        router = make_router()
+        router.config.settings.max_pair_calls = 2
+        for _ in range(5):
+            router.call("cline", "আবার বলো", sender="opencode")
+        self.assertEqual(router.call("cline", "আবারও", sender="opencode").ok, False)
+        self.assertEqual(router.pair_calls[("opencode", "cline")], 2)
+        self.assertEqual(router.calls, 2)
+
+
+class KeyRotationTest(unittest.TestCase):
+    def test_second_key_used_after_quota_error(self):
+        attempts = []
+
+        def runner(cmd, env, cwd, timeout):
+            attempts.append(env.get("OPENROUTER_API_KEY"))
+            if len(attempts) == 1:
+                return 1, "", "429 rate limit exceeded"
+            return 0, "ঠিক আছে", ""
+
+        spec = AgentSpec(
+            name="claude",
+            command=["claude", "-p", "{message}"],
+            env={"ANTHROPIC_AUTH_TOKEN": "$OPENROUTER_API_KEY"},
+            keys=["OPENROUTER_API_KEY"],
+        )
+        adapter = CliAdapter(
+            spec, runner=runner, environ={"OPENROUTER_API_KEY": "key-1", "OPENROUTER_API_KEY_2": "key-2"}
+        )
+        reply = adapter.send("হাই")
+        self.assertTrue(reply.ok)
+        self.assertEqual(attempts, ["key-1", "key-2"])
+
+
+class DryRunTest(unittest.TestCase):
+    def test_dry_run_never_spawns(self):
+        runner = FakeRunner()
+        router = make_router(runner, dry_run=True)
+        replies = router.group("হাই")
+        self.assertEqual(runner.calls, [])
+        self.assertTrue(all("[dry-run]" in r.text for r in replies))
+
+
+class StoreTest(unittest.TestCase):
+    def test_append_and_count(self):
+        store = Store(Path(tempfile.mkdtemp()) / "t.jsonl")
+        store.append({"agent": "opencode", "text": "হাই"})
+        self.assertEqual(store.today_count("opencode"), 1)
+        self.assertEqual(len(store.recent()), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class DoctorTest(unittest.TestCase):
+    def _checks(self, environ=None, which=None):
+        from mesh.doctor import run_doctor
+
+        config = MeshConfig.load()
+        store_path = Path(tempfile.mkdtemp()) / "t.jsonl"
+        return {
+            c.item: c
+            for c in run_doctor(
+                config,
+                environ=environ or {},
+                which=which or (lambda name: None),
+                store_path=store_path,
+            )
+        }
+
+    def test_missing_cli_is_warning_not_failure(self):
+        checks = self._checks()
+        self.assertEqual(checks["🧑‍💻 OpenCode"].status, "warn")
+        self.assertIn("ইনস্টল নেই", checks["🧑‍💻 OpenCode"].detail)
+
+    def test_missing_key_is_failure(self):
+        checks = self._checks()
+        self.assertEqual(checks["claude keys"].status, "fail")
+
+    def test_key_and_binary_found(self):
+        checks = self._checks(
+            environ={"OPENROUTER_API_KEY": "sk-or-secret", "OPENROUTER_API_KEY_2": "sk-or-two"},
+            which=lambda name: "/usr/bin/" + name,
+        )
+        self.assertEqual(checks["claude keys"].status, "ok")
+        self.assertIn("2টা", checks["claude keys"].detail)
+        self.assertNotIn("sk-or-secret", checks["claude keys"].detail)  # key লুকানো থাকে
+        self.assertEqual(checks["🧑‍💻 OpenCode"].status, "ok")
+
+    def test_store_is_writable(self):
+        self.assertEqual(self._checks()["store"].status, "ok")
+
+
+class IssueHallTest(unittest.TestCase):
+    def _gh_runner(self, payload, capture=None):
+        import json as _json
+
+        def runner(cmd, env, cwd, timeout):
+            if capture is not None:
+                capture.append(cmd)
+            return 0, _json.dumps(payload), ""
+
+        return runner
+
+    def test_fetch_hall_reads_comments(self):
+        from mesh.issue import fetch_hall
+
+        payload = {
+            "title": "গ্রুপ চ্যাট",
+            "body": "শুরু করো",
+            "comments": [
+                {"author": {"login": "zayan"}, "body": "@mesh হাই সবাই"},
+                {"author": {"login": "bot"}, "body": "OpenCode বলছে: ঠিক আছে"},
+            ],
+        }
+        hall = fetch_hall(7, runner=self._gh_runner(payload))
+        self.assertIn("@zayan", hall)
+        self.assertIn("OpenCode", hall)
+        self.assertIn("গ্রুপ চ্যাট", hall)
+
+    def test_fetch_hall_redacts_secrets(self):
+        from mesh.issue import fetch_hall
+
+        payload = {"title": "x", "body": "", "comments": [
+            {"author": {"login": "a"}, "body": "key sk-or-v1-abcdef1234567890abc লিক হয়েছে"}]}
+        hall = fetch_hall(1, runner=self._gh_runner(payload))
+        self.assertNotIn("sk-or-v1-abcdef1234567890abc", hall)
+        self.assertIn("REDACTED", hall)
+
+    def test_fetch_hall_survives_gh_failure(self):
+        from mesh.issue import fetch_hall
+
+        def bad(cmd, env, cwd, timeout):
+            return 1, "", "gh: not found"
+
+        self.assertEqual(fetch_hall(1, runner=bad), "")
+
+    def test_post_comment_writes_marker_and_redacts(self):
+        from mesh.issue import post_comment
+
+        captured = []
+        ok = post_comment(
+            5, "opencode", "🧑‍💻 OpenCode", "উত্তর — key sk-ant-abcdefgh12345678",
+            runner=self._gh_runner({}, captured),
+        )
+        self.assertTrue(ok)
+        body = captured[0][captured[0].index("--body") + 1]
+        self.assertIn("mesh:opencode", body)
+        self.assertNotIn("sk-ant-abcdefgh12345678", body)
+
+    def test_post_comment_dry_run_does_not_call_gh(self):
+        from mesh.issue import post_comment
+
+        captured = []
+        self.assertTrue(post_comment(5, "cline", "Cline", "হাই", runner=self._gh_runner({}, captured), dry_run=True))
+        self.assertEqual(captured, [])
+
+
+class GroupHistoryTest(unittest.TestCase):
+    def test_history_reaches_the_prompt(self):
+        runner = FakeRunner()
+        router = make_router(runner)
+        router.group("নতুন প্রশ্ন", history="- @zayan: আগের কথা")
+        joined = " ".join(" ".join(cmd) for cmd, _env in runner.calls)
+        self.assertIn("আগের কথা", joined)
+        self.assertIn("হলঘরে", joined)
+
+    def test_direct_mode_ignores_history(self):
+        runner = FakeRunner()
+        router = make_router(runner)
+        router.direct("এই bug ঠিক করো")
+        joined = " ".join(" ".join(cmd) for cmd, _env in runner.calls)
+        self.assertNotIn("আগের কথা", joined)
+
+
+class RedactTest(unittest.TestCase):
+    def test_masks_common_key_shapes(self):
+        from mesh.issue import redact
+
+        text = " ".join([
+            "sk-or-v1-aaaaaaaaaaaaaaaaaaaa",
+            "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "xai-aaaaaaaaaaaaaaaaaaaa",
+            "Bearer abcdefghijklmnopqrstuvwxyz",
+        ])
+        out = redact(text)
+        for secret in text.split():
+            if secret != "Bearer":
+                self.assertNotIn(secret, out)
+        self.assertEqual(out.count("«REDACTED»"), 5)
+
+
+class GhEnvTest(unittest.TestCase):
+    def test_gh_calls_get_a_real_environment(self):
+        from mesh.issue import fetch_hall, post_comment
+
+        seen = []
+
+        def runner(cmd, env, cwd, timeout):
+            seen.append(dict(env))
+            return 0, "{}", ""
+
+        fetch_hall(1, runner=runner)
+        post_comment(1, "opencode", "OpenCode", "হাই", runner=runner)
+        self.assertTrue(seen)
+        for env in seen:
+            self.assertIn("PATH", env, "gh চালানোর জন্য PATH দরকার")
+
+
+class FreeModelTest(unittest.TestCase):
+    def test_default_model_expansion(self):
+        from mesh.keys import expand_env_value
+
+        self.assertEqual(expand_env_value("$CLAUDE_MODEL:-openrouter/free", {}), "openrouter/free")
+        self.assertEqual(
+            expand_env_value("$CLAUDE_MODEL:-openrouter/free", {"CLAUDE_MODEL": "z-ai/glm-5.2:free"}),
+            "z-ai/glm-5.2:free",
+        )
+        # খালি ভেরিয়েবল মানে ডিফল্টই ব্যবহার হবে
+        self.assertEqual(expand_env_value("$CLAUDE_MODEL:-openrouter/free", {"CLAUDE_MODEL": ""}), "openrouter/free")
+        # ডিফল্ট ছাড়া পুরনো আচরণ অপরিবর্তিত
+        self.assertEqual(expand_env_value("$OPENROUTER_API_KEY", {}), "")
+
+    def test_claude_works_without_money(self):
+        """কোনো CLAUDE_MODEL সেট না করলেও claude ফ্রি মডেলে চলে।"""
+        agent = MeshConfig.load().get("claude")
+        from mesh.keys import expand_env_value
+
+        resolved = expand_env_value(agent.env["ANTHROPIC_MODEL"], {})
+        self.assertIn("free", resolved.lower())
+
+    def test_doctor_reports_model(self):
+        from mesh.doctor import run_doctor
+
+        checks = {
+            c.item: c
+            for c in run_doctor(
+                MeshConfig.load(), environ={}, which=lambda n: None,
+                store_path=Path(tempfile.mkdtemp()) / "t.jsonl",
+            )
+        }
+        self.assertIn("claude model", checks)
+        self.assertIn("ফ্রি", checks["claude model"].detail)
+
+    def test_base_env_keeps_empty_literal_but_skips_missing_var(self):
+        attempts = []
+
+        def runner(cmd, env, cwd, timeout):
+            attempts.append(dict(env))
+            return 0, "ok", ""
+
+        spec = AgentSpec(
+            name="claude",
+            command=["claude", "-p", "{message}"],
+            env={"ANTHROPIC_API_KEY": "", "ANTHROPIC_AUTH_TOKEN": "$NOPE_MISSING"},
+        )
+        CliAdapter(spec, runner=runner, environ={}).send("হাই")
+        self.assertEqual(attempts[0].get("ANTHROPIC_API_KEY"), "")  # literal "" থাকবে
+        self.assertNotIn("ANTHROPIC_AUTH_TOKEN", attempts[0])      # নেই → সেট হবে না

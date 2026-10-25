@@ -1,0 +1,8 @@
+# Cline rules — ZAYAN GLOBAL BRAIN v1.0
+# পূর্ণ নির্দেশনা: AGENTS.md (একমাত্র সত্যের উৎস)
+
+- ভাষা: বাংলা (স্যার সম্বোধন), কোড/কমিট/কোড-নাম ইংরেজিতে
+- AGENTS.md এর অগ্রাধিকার ক্রম মানুন
+- কাজ শেষে হ্যান্ডঅফ লিখুন; verify ছাড়া "শেষ" বলবেন না
+- key / ছাত্রের ডেটা কখনো লগ বা কমিটে নয়
+- config/agents.json এর max_calls_per_run, max_rounds, max_pair_calls ভাঙবেন না

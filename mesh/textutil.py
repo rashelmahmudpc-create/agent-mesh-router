@@ -1,0 +1,45 @@
+"""ছোট ছোট টেক্সট হেল্পার — কোনো বাইরের লাইব্রেরি লাগে না।"""
+
+from __future__ import annotations
+
+import re
+
+MENTION_RE = re.compile(r"@([A-Za-z0-9][A-Za-z0-9_-]*)")
+
+QUOTA_MARKERS = (
+    "429",
+    "rate limit",
+    "rate-limit",
+    "ratelimit",
+    "too many requests",
+    "quota",
+    "insufficient_quota",
+    "resource exhausted",
+    "overloaded",
+)
+
+
+def find_mentions(text: str, known: list[str] | None = None) -> list[str]:
+    """`@opencode` এর মতো ডাকগুলো বের করে (ক্রম না বদলে, পুনরাবৃত্তি ছাড়া)।"""
+    found: list[str] = []
+    for raw in MENTION_RE.findall(text or ""):
+        name = raw.lower()
+        if known is not None and name not in known:
+            continue
+        if name not in found:
+            found.append(name)
+    return found
+
+
+def looks_like_quota_problem(*chunks: str) -> bool:
+    """আউটপুটে রেট-লিমিট / কোটা শেষের লক্ষণ আছে কি?"""
+    blob = " ".join(c for c in chunks if c).lower()
+    return any(marker in blob for marker in QUOTA_MARKERS)
+
+
+def clip(text: str, limit: int) -> str:
+    """লম্বা উত্তর কেটে ছোট করে, শেষে ... বসায়।"""
+    text = (text or "").strip()
+    if limit <= 0 or len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "…"

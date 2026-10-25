@@ -1,0 +1,149 @@
+{
+  "_comment": "কে কী কাজ করবে — এই ফাইলটাই টিমের তালিকা। নতুন এজেন্ট যোগ করতে নিচে একটা ব্লক কপি করে বসান।",
+  "settings": {
+    "default_agent": "opencode",
+    "max_rounds": 3,
+    "max_calls_per_run": 8,
+    "max_pair_calls": 3,
+    "reply_char_limit": 4000
+  },
+  "agents": [
+    {
+      "name": "opencode",
+      "label": "🧑‍💻 OpenCode",
+      "kind": "cli",
+      "enabled": true,
+      "roles": [
+        "worker",
+        "chat"
+      ],
+      "command": [
+        "opencode",
+        "run",
+        "--auto",
+        "{message}"
+      ],
+      "timeout_sec": 900,
+      "keywords": [
+        "code",
+        "fix",
+        "bug",
+        "refactor",
+        "test",
+        "implement",
+        "কোড",
+        "বাগ",
+        "ঠিক"
+      ],
+      "notes": "যাচাই করা: opencode v2.1.4, `run --auto` ঠিক আছে; ডিফল্ট ফ্রি মডেল (flint-40b-free) — key লাগে না"
+    },
+    {
+      "name": "cline",
+      "label": "🟦 Cline",
+      "kind": "cli",
+      "enabled": true,
+      "roles": [
+        "worker",
+        "chat"
+      ],
+      "command": [
+        "cline",
+        "-y",
+        "{message}"
+      ],
+      "timeout_sec": 900,
+      "keywords": [
+        "ui",
+        "frontend",
+        "design",
+        "review",
+        "plan",
+        "রিভিউ",
+        "ডিজাইন"
+      ],
+      "notes": "যাচাই করা: cline v3.0.73, `-y/--yolo` ও `--json` ঠিক আছে"
+    },
+    {
+      "name": "claude",
+      "label": "🟠 Claude Code",
+      "kind": "cli",
+      "enabled": true,
+      "roles": [
+        "worker",
+        "chat"
+      ],
+      "command": [
+        "claude",
+        "-p",
+        "{message}"
+      ],
+      "timeout_sec": 900,
+      "env": {
+        "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
+        "ANTHROPIC_AUTH_TOKEN": "$OPENROUTER_API_KEY",
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_MODEL": "$CLAUDE_MODEL:-openrouter/free"
+      },
+      "keys": [
+        "OPENROUTER_API_KEY"
+      ],
+      "keywords": [
+        "architecture",
+        "hard",
+        "refactor",
+        "গুরুত্বপূর্ণ",
+        "আর্কিটেকচার"
+      ],
+      "notes": "যাচাই করা: v2.1.310, `-p` ঠিক আছে। টাকা নেই? $0 চলবে — OpenRouter এর :free মডেল (ডিফল্ট openrouter/free), key ছাড়া কার্ড লাগে না"
+    },
+    {
+      "name": "hermes",
+      "label": "☤ Hermes",
+      "kind": "cli",
+      "enabled": true,
+      "roles": [
+        "worker",
+        "chat",
+        "memory"
+      ],
+      "command": [
+        "hermes",
+        "chat",
+        "-q",
+        "{message}"
+      ],
+      "timeout_sec": 900,
+      "keys": [
+        "OPENROUTER_API_KEY"
+      ],
+      "keywords": [
+        "remember",
+        "memory",
+        "notes",
+        "launch",
+        "মনে",
+        "পরিকল্পনা"
+      ],
+      "notes": "OpenRouter :free মডেলেও চলে; মডেলে ৬৪K context + tool calling লাগে"
+    },
+    {
+      "name": "openhands",
+      "label": "🖐️ OpenHands",
+      "kind": "github_issue",
+      "enabled": true,
+      "roles": [
+        "worker",
+        "cloud"
+      ],
+      "mention": "@openhands",
+      "keywords": [
+        "issue",
+        "pr",
+        "big",
+        "long",
+        "বড়"
+      ],
+      "notes": "ওদের ক্লাউডে ফ্রি চলে; ইনপুট যায় GitHub Issue দিয়ে, উত্তর আসে comment হিসেবে (async)"
+    }
+  ]
+}

@@ -43,3 +43,16 @@
 - Dynamic tool discovery
 - Cross-agent memory propagation
 - Enterprise workflow automation
+
+---
+
+## অগ্রগতি (2026-10-25)
+
+| ফেজ | অবস্থা | প্রমাণ |
+|---|---|---|
+| ১. Foundation | ✅ হয়েছে | `config/agents.json`, সেশন/কাজের মডেল (`Reply`, `Store`) |
+| ২. Core Routing | ✅ হয়েছে | `mesh/router.py` — mention/keyword রাউটিং, direct + group |
+| ৩. Tool Integration | 🟡 আংশিক | `gh` দিয়ে Issue/comment (হলঘর), key rotation; Cloudflare বাকি |
+| ৪. Multi-Agent | 🟡 আংশিক | গ্রুপ চ্যাট + এজেন্ট↔এজেন্ট mention; human approval gate বাকি |
+| ৫. Observability | 🟡 আংশিক | `.mesh/transcript.jsonl`, ডক্টর, CI; dashboard বাকি |
+| ৬. Hardening | 🟡 আংশিক | `redact()`, approve-gate নিয়ম ব্রেইনে; ডিপ্লয়মেন্ট বাকি |
