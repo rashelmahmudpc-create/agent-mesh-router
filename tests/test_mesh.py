@@ -87,7 +87,7 @@ class ConfigTest(unittest.TestCase):
         config = all_enabled_config()
         names = [a.name for a in config.chat_agents()]
         self.assertIn("openhands", names)
-        self.assertEqual(config.get("openhands").daily_limit, 2)
+        self.assertEqual(config.get("openhands").daily_limit, 3)
 
 
 class ClassifyTest(unittest.TestCase):
@@ -461,7 +461,7 @@ class WorkflowFileTest(unittest.TestCase):
 
         spec = MeshConfig.load().get("openhands")
         self.assertIn("chat", spec.roles)
-        self.assertEqual(spec.daily_limit, 2)
+        self.assertEqual(spec.daily_limit, 3)
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
         self.assertIn("OpenHands কোটা", text)
         self.assertIn(".mesh-daily.json", text)
@@ -577,7 +577,7 @@ class CommandEnvTest(unittest.TestCase):
         # key আছে + গ্রুপ চ্যাটেও উত্তর দেয় (দিনে ২টার সীমা নিয়ে)
         self.assertIn("openhands", active)
         self.assertIn("openhands", [a.name for a in config.chat_agents()])
-        self.assertEqual(config.get("openhands").daily_limit, 2)
+        self.assertEqual(config.get("openhands").daily_limit, 3)
 
 
 class DoctorHonestyTest(unittest.TestCase):
@@ -942,6 +942,20 @@ class OpenHandsCloudTest(unittest.TestCase):
         import mesh.openhands_cloud  # noqa: F401
 
         self.assertEqual(os.environ.get("OPENHANDS_SUPPRESS_BANNER"), "1")
+
+    def test_finish_tool_message_is_an_answer(self):
+        """অনেক সময় agent উত্তর দেয় finish tool দিয়ে — সেটাও ধরতে হবে।"""
+
+        class ActionEvent:
+            source = "agent"
+            tool_name = "finish"
+            action = type("A", (), {"message": "🔵 OpenHands — প্রস্তুত, স্যার"})()
+
+        from types import SimpleNamespace as NS
+
+        from mesh.openhands_cloud import _last_text
+
+        self.assertEqual(_last_text(NS(state=NS(events=[ActionEvent()]))), "🔵 OpenHands — প্রস্তুত, স্যার")
 
     def test_no_answer_is_empty_not_object_repr(self):
         from mesh.openhands_cloud import _last_text

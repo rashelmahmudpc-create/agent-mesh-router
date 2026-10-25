@@ -121,44 +121,27 @@ def _default_factory(api_key: str, cloud_url: str, model: str):
     return run
 
 
-def _last_text(conversation) -> str:
-    """conversation থেকে শেষ সহায়ক উত্তরটা বের করা (SDK সংস্করণভেদে ভিন্ন)।"""
-    # ১) আসল পথ: conversation.state.events (বা _state.events) → শেষ agent message
-    for holder in (getattr(conversation, "state", None), getattr(conversation, "_state", None)):
+def _all_events(conversation):
+    """conversation-এর সব event (SDK সংস্করণভেদে state.events / _state.events / events)।"""
+    for holder in (
+        getattr(conversation, "state", None),
+        getattr(conversation, "_state", None),
+        conversation,
+    ):
         events = getattr(holder, "events", None) if holder is not None else None
         if events is None:
             continue
         try:
-            for event in reversed(list(events)):
-                text = _event_text(event)
-                if text:
-                    return text
-        except Exception:  # noqa: BLE001 — কোনো এক সংস্করণে events অন্যভাবে আসে
-            pass
-
-    # ২) পুরনো/সরল attr
-    for attr in ("last_response", "final_response", "response"):
-        value = getattr(conversation, attr, None)
-        if isinstance(value, str) and value.strip():
-            return value
-    for event in reversed(list(getattr(conversation, "events", None) or [])):
-        text = _event_text(event)
-        if text:
-            return text
-    # ৩) শেষ চেষ্টা: object-এর repr কখনোই উত্তর নয় — খালি ফেরত দিই
-    return ""
+            events = list(events)
+        except TypeError:
+            continue
+        if events:
+            return events
+    return []
 
 
-def _event_text(event) -> str:
-    """একটা event থেকে লেখা বের করা (শুধু agent/assistant এর কথা)।"""
-    source = getattr(event, "source", None)
-    if source is not None and str(source).lower() not in ("agent", "assistant"):
-        return ""
-    name = type(event).__name__.lower()
-    if "action" in name or "observation" in name or "error" in name:
-        return ""
-    message = getattr(event, "llm_message", None) or getattr(event, "message", None)
-    content = getattr(message, "content", None) if message is not None else getattr(event, "content", None)
+def _content_text(content) -> str:
+    """Message-এর content (str বা block তালিকা) থেকে প্লেইন লেখা।"""
     if isinstance(content, str):
         return content.strip()
     parts: list[str] = []
@@ -170,3 +153,51 @@ def _event_text(event) -> str:
         if isinstance(text, str):
             parts.append(text)
     return "\n".join(p for p in parts if p.strip()).strip()
+
+
+def _event_text(event) -> str:
+    """একটা event থেকে উত্তর-লেখা — MessageEvent হোক বা finish action হোক।"""
+    source = getattr(event, "source", None)
+    name = type(event).__name__.lower()
+
+    # 🔚 finish tool: agent এখানেই তার চূড়ান্ত উত্তর রাখে
+    if "action" in name:
+        tool = str(getattr(event, "tool_name", "") or "").lower()
+        if "finish" in tool or "finish" in name:
+            action = getattr(event, "action", None)
+            text = getattr(action, "message", None) if action is not None else None
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+            message = getattr(event, "message", None)  # ActionEvent-এর property
+            if isinstance(message, str) and message.strip():
+                return message.strip()
+        return ""
+
+    if "observation" in name or "error" in name:
+        return ""
+
+    if source is not None and str(source).lower() not in ("agent", "assistant"):
+        return ""
+
+    message = getattr(event, "llm_message", None) or getattr(event, "message", None)
+    content = getattr(message, "content", None) if message is not None else None
+    if content is None:
+        content = getattr(event, "content", None)
+    return _content_text(content)
+
+
+def _last_text(conversation) -> str:
+    """সব event থেকে **শেষ আসল উত্তর** — সাধারণ message আগে, নইলে finish message।"""
+    texts = [(type(e).__name__.lower(), _event_text(e)) for e in _all_events(conversation)]
+    texts = [(name, text) for name, text in texts if text]
+    if texts:
+        plain = [text for name, text in texts if "action" not in name]
+        return plain[-1] if plain else texts[-1][1]
+
+    # পুরনো/সরল attr
+    for attr in ("last_response", "final_response", "response"):
+        value = getattr(conversation, attr, None)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    # object-এর repr কখনোই উত্তর নয় — খালি ফেরত দিই
+    return ""
