@@ -67,12 +67,28 @@ check("গ্রুপের সাজেশন বদলায়", ($("#feed .
 click($('#seg button[data-m="agent"]'));
 
 // ---- ড্রয়ার ----
+// শুধু class দেখা যথেষ্ট নয়: CSS specificity-তে হারলে class থাকলেও ড্রয়ার
+// স্ক্রিনের বাইরে আটকে থাকে (transform বদলায় না)। তাই transform-ও মাপি।
+const shiftX = (el) => {
+  const t = window.getComputedStyle(el).transform || "none";
+  if (t === "none") return 0;
+  const m = t.match(/translateX\((-?[\d.]+)%?\)/);
+  if (m) return parseFloat(m[1]);
+  const mat = t.match(/matrix\(([^)]+)\)/);
+  return mat ? parseFloat(mat[1].split(",")[4]) : NaN;
+};
+const onScreen = (el) => Math.abs(shiftX(el)) < 1;
+const tf = (el) => window.getComputedStyle(el).transform;
+
 click($("#btnMenu"));
 check("সাইডবার খোলে", $("#sidebar").classList.contains("on"));
+check("সাইডবার সত্যিই স্ক্রিনে আসে", onScreen($("#sidebar")), `transform=${tf($("#sidebar"))}`);
 click($("#scrim"));
 check("সাইডবার বন্ধ হয়", !$("#sidebar").classList.contains("on"));
+check("সাইডবার আবার বাইরে যায়", !onScreen($("#sidebar")), `transform=${tf($("#sidebar"))}`);
 click($("#btnMore"));
 check("সেটিংস খোলে", $("#settings").classList.contains("on"));
+check("সেটিংস ড্রয়ার সত্যিই স্ক্রিনে আসে", onScreen($("#settings")), `transform=${tf($("#settings"))}`);
 check("থিম ৪টা অপশন", $$("#themes .th").length === 4);
 check("API চুক্তি দেখানো হচ্ছে", ($("#contract")?.textContent || "").includes("/api/chat"));
 click($("#stClose"));
