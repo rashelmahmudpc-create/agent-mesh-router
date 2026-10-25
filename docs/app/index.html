@@ -459,7 +459,7 @@ const REAL_AGENTS=[
  {id:'claude',name:'Claude Code',role:'প্ল্যান/কোড',emoji:'🟠',color:'#d97757'},
  {id:'hermes',name:'Hermes',role:'ম্যানেজার',emoji:'☤',color:'#8b5cf6'},
  {id:'openhands',name:'OpenHands',role:'অটোমেশন',emoji:'🖐️',color:'#f59e0b'}];
-const APP_V='2026-10-25.2'; // 🔖 সংস্করণ — সেটিংসে দেখা যায়
+const APP_V='2026-10-26.1'; // 🔖 সংস্করণ — সেটিংসে দেখা যায়
 const cfg=Object.assign({theme:'dark',accent:'#d97757',fs:17,name:'',server:'',token:'',demo:true,lang:'bn-BD',speak:true,mode:'agent',ghRepo:'rashelmahmudpc-create/agent-mesh-router',ghIssue:'3',ghToken:'',fastMode:true,fastProvider:'groq',fastKey:'',fastModel:'',route:'auto'},lsGet('ax.cfg',{}));
 const S={chats:lsGet('ax.chats',[]),cur:null,busy:false,ac:null,atts:[],agents:DEMO_AGENTS,conn:'demo',stick:true,dict:null};
 const ELS=new WeakMap();
@@ -794,7 +794,12 @@ function parseLine(line,onEv){
   try{onEv(JSON.parse(line))}catch{}
 }
 async function netRun(req,onEv,sig){
-  const body={chat_id:req.chat.id,mode:req.mode,message:req.text,attachments:req.uploaded,voice:!!req.voice,lang:cfg.lang};
+  // 🧠 আগের কথা ভাগ করি (শেষ ৮টা) — যাতে উত্তর প্রাসঙ্গিক থাকে
+  const hist=(req.chat&&Array.isArray(req.chat.msgs)?req.chat.msgs:[])
+    .filter(m=>m&&m.text&&m.role!=='agent')
+    .slice(0,-1).slice(-8)
+    .map(m=>({role:m.role==='user'?'user':'assistant',text:m.text.slice(0,600)}));
+  const body={chat_id:req.chat.id,mode:req.mode,message:req.text,attachments:req.uploaded,voice:!!req.voice,lang:cfg.lang,history:hist};
   const r=await fetch(base()+'/api/chat',{method:'POST',headers:hdr(true),body:JSON.stringify(body),signal:sig});
   if(!r.ok)throw new Error('সার্ভার থেকে ত্রুটি ('+r.status+')');
   const ct=r.headers.get('content-type')||'';
