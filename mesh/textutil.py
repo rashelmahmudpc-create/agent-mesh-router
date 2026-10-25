@@ -6,6 +6,13 @@ import re
 
 MENTION_RE = re.compile(r"@([A-Za-z0-9][A-Za-z0-9_-]*)")
 
+# অ্যাপ/Issue থেকে আসা কাঁচা লেখার আবর্জনা
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+MESH_CALL_RE = re.compile(r"^\s*@mesh\b[ \t]*", re.IGNORECASE)
+
+# 📱 অ্যাপের comment-এ যা থাকে: `<!-- app:1792950773735 mode:agent -->`
+APP_MARKER_RE = re.compile(r"<!--\s*app:[^>]*?mode:(agent|group)\s*-->", re.IGNORECASE)
+
 # টার্মিনালের রঙ/কার্সর কোড — Issue এ গেলে অদ্ভুত অক্ষর দেখায়
 ANSI_RE = re.compile(r"(?:\x1b|◈)\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\[\d+m")
 
@@ -51,6 +58,29 @@ def find_mentions(text: str, known: list[str] | None = None) -> list[str]:
         if name not in found:
             found.append(name)
     return found
+
+
+def app_mode_of(text: str) -> str:
+    """অ্যাপের মার্কার থেকে মোড পড়ি — `agent` / `group`; অ্যাপ না হলে খালি।
+
+    অ্যাপে দুইটা ট্যাব আছে: 👤 এজেন্ট (একজন উত্তর দেবে) আর 👥 গ্রুপ (সবাই)।
+    এই মার্কারটাই Actions-কে বলে দেয় কোনটা চালাতে হবে।
+    """
+    match = APP_MARKER_RE.search(text or "")
+    return match.group(1).lower() if match else ""
+
+
+def clean_prompt(text: str) -> str:
+    """অ্যাপ/Issue থেকে আসা কাঁচা লেখা পরিষ্কার করে।
+
+    কাঁচা comment-এ `@mesh` ডাক আর `<!-- app:… -->` মার্কার থাকে — ওগুলো
+    এজেন্টের কাছে গেলে সে বিভ্রান্ত হয়ে ডাকটাই ফিরিয়ে লেখে। তাই বাদ দিই।
+    """
+    out = HTML_COMMENT_RE.sub("", text or "")
+    out = MESH_CALL_RE.sub("", out.strip())
+    out = re.sub(r"[ \t]+\n", "\n", out)
+    out = re.sub(r"\n{3,}", "\n\n", out).strip()
+    return out  # সব বাদ পড়লে (শুধুই মার্কার ছিল) খালি ফেরাই — কলার ঠিক করবে
 
 
 def looks_like_quota_problem(*chunks: str) -> bool:

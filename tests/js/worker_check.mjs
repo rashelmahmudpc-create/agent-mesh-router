@@ -103,12 +103,14 @@ check("upload নাম-টাইপ ফেরায়", res.status === 200 && 
 const chatReq = (body, headers = auth) =>
   worker.fetch(req("/api/chat", { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify(body) }), env);
 
-res = await chatReq({ chat_id: "c1", mode: "agent", message: "আজ কী করবো?" });
+res = await chatReq({ chat_id: "c1", mode: "agent", message: "আজ কী করবো?", history: [{ role: "user", text: "আগে স্যার বলেছিলেন হাই" }] });
 check("chat → text/event-stream", (res.headers.get("content-type") || "").includes("text/event-stream"));
 const posted = calls.filter((c) => c.init.method === "POST" && c.url.endsWith("/comments")).pop();
 const postedBody = posted ? JSON.parse(posted.init.body).body : "";
 const evs = await eventsOf(res);
 check("Issue-এ @mesh comment গেছে", postedBody.startsWith("@mesh আজ কী করবো?"), postedBody.split("\n")[0]);
+check("🧠 অ্যাপের আগের কথা সাথে যায়", postedBody.includes("[আগের কথা]") && postedBody.includes("আগে স্যার বলেছিলেন হাই"));
+check("🏷️ mode marker যায় (Actions এটা পড়ে direct চালাবে)", postedBody.includes("mode:agent"));
 check("status ইভেন্ট আছে", evs.some((e) => e.type === "status"));
 check("tool ইভেন্ট আছে", evs.some((e) => e.type === "tool" && e.name === "মেশ"));
 check("delta স্ট্রিম হয়েছে", evs.filter((e) => e.type === "delta").length > 2, `${evs.filter((e) => e.type === "delta").length} টুকরা`);
@@ -120,6 +122,8 @@ check("tool_result শেষে", evs.filter((e) => e.type === "tool_result").le
 const before = calls.length;
 res = await chatReq({ chat_id: "c2", mode: "group", message: "সবাই পরিচয় দাও" });
 const gev = await eventsOf(res);
+const gPosted = calls.filter((c) => c.init.method === "POST" && c.url.endsWith("/comments")).pop();
+check("👥 group marker যায়", gPosted && JSON.parse(gPosted.init.body).body.includes("mode:group"));
 check("group: typing ইভেন্ট", gev.some((e) => e.type === "typing" && e.agent?.id === "opencode"));
 check("group: agent_message আছে", gev.filter((e) => e.type === "agent_message").length > 2);
 check("group: delta জোড়া লাগলে পুরো লেখা হয়", (() => {

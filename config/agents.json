@@ -106,7 +106,7 @@
         "text"
       ],
       "timeout_sec": 900,
-      "chat_timeout_sec": 150,
+      "chat_timeout_sec": 240,
       "env": {
         "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
         "ANTHROPIC_AUTH_TOKEN": "$OPENROUTER_API_KEY",
@@ -123,7 +123,7 @@
         "গুরুত্বপূর্ণ",
         "আর্কিটেকচার"
       ],
-      "notes": "`-p` + `--output-format text`। ANTHROPIC_MODEL = $CLAUDE_MODEL:-openrouter/free; খালি উত্তর/লিমিট হলে FREE_M2, FREE_M3, শেষে openrouter/free",
+      "notes": "`-p` + `--output-format text`। ANTHROPIC_MODEL = $CLAUDE_MODEL:-openrouter/free; খালি উত্তর/লিমিট হলে FREE_M2, FREE_M3, শেষে openrouter/free। chat_timeout_sec 240: ফ্রি মডেল ধীর — ১৫০-এ সময় শেষ হয়ে '❌ সাড়া দিতে পারিনি' আসত",
       "fallback_commands": [
         [
           "claude",

@@ -543,7 +543,18 @@ async function handleChat(request, env, ctx) {
   }
 
   const names = files.map((f) => f?.name).filter(Boolean);
-  const body = `@mesh ${text}${names.length ? `\n\n📎 ${names.join(", ")}` : ""}\n\n<!-- app:${Date.now()} -->`;
+  // 🧠 অ্যাপের নিজের চ্যাট-স্মৃতি (আগের কয়েক কথা) — এজেন্ট যেন প্রাসঙ্গিক উত্তর দেয়।
+  //    Issue-এর পুরনো সব comment (হল) এখানে ইচ্ছে করে পাঠানো হয় না (`--no-hall`)।
+  const past = (Array.isArray(payload?.history) ? payload.history : [])
+    .filter((h) => h && typeof h.text === "string" && h.text.trim())
+    .slice(-4)
+    .map((h) => `- ${h.role === "assistant" ? "এজেন্ট" : "স্যার"}: ${h.text.replace(/\s+/g, " ").trim().slice(0, 240)}`);
+  const memory = past.length ? `\n\n[আগের কথা]\n${past.join("\n")}` : "";
+  // 🏷️ মার্কারে mode থাকে — Actions রান এটা পড়ে direct/group ঠিক করে
+  const tag = mode === "group" ? "group" : "agent";
+  const body =
+    `@mesh ${text}${names.length ? `\n\n📎 ${names.join(", ")}` : ""}` +
+    `${memory}\n\n<!-- app:${Date.now()} mode:${tag} -->`;
 
   return sse(env, async (send) => {
     send({ type: "status", text: "এজেন্টদের ডেকে পাঠাচ্ছি…" });

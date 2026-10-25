@@ -18,6 +18,7 @@ from .chat import default_store
 from .issue import fetch_hall, post_comment
 from .config import MeshConfig
 from .router import Router
+from .textutil import app_mode_of
 
 
 def _print_list(config: MeshConfig) -> None:
@@ -71,6 +72,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("message", nargs="?", default="", help="যে কথাটা এজেন্টদের বলতে চান")
     parser.add_argument("--mode", choices=["direct", "group"], default="direct")
     parser.add_argument("--issue", type=int, default=None, help="এই Issue-কে গ্রুপ চ্যাট বানাও")
+    parser.add_argument(
+        "--no-hall", action="store_true",
+        help="Issue-এর পুরনো comment পটভূমি হিসেবে নিও না (অ্যাপ নিজেই আগের কথা পাঠায়)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="কিছু চালাবে না, শুধু দেখাবে")
     parser.add_argument("--json", action="store_true", help="মেশিন-পাঠ্য আউটপুট")
     parser.add_argument(
@@ -96,6 +101,14 @@ def main(argv: list[str] | None = None) -> int:
         help="সেরা N টা ফ্রি মডেলের আইডি (প্রতি লাইনে একটা)",
     )
     args = parser.parse_args(argv)
+
+    # 📱 অ্যাপ থেকে এলে (মার্কারে mode থাকে) মোড আর পটভূমি নিজেই ঠিক করি —
+    # workflow-এ কিছু বদলাতে না হলেও অ্যাপ ঠিকঠাক চলে।
+    app_mode = app_mode_of(args.message)
+    if app_mode:
+        if app_mode == "agent":
+            args.mode = "direct"  # 👤 একজনই উত্তর দেবে (দ্রুত, কম হট্টগোল)
+        args.no_hall = True       # Issue-এর পুরনো comment বাদ — অ্যাপ নিজের কথা পাঠায়
 
     config = MeshConfig.load(args.config)
 
@@ -169,7 +182,11 @@ def main(argv: list[str] | None = None) -> int:
         quick=bool(args.issue),
     )
 
-    history = fetch_hall(args.issue) if (args.issue and args.mode == "group") else ""
+    history = (
+        fetch_hall(args.issue)
+        if (args.issue and args.mode == "group" and not args.no_hall)
+        else ""
+    )
     if history and not args.json:
         print(f"🏛️ Issue #{args.issue} এর আগের আলোচনা পড়া হয়েছে ({len(history)} অক্ষর)", file=sys.stderr)
 

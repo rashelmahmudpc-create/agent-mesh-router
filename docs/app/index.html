@@ -834,7 +834,7 @@ async function ghRun(req,onEv,sig){
   const names=(req.atts||[]).map(a=>a.name).filter(Boolean);
   onEv({type:'status',text:'GitHub Issue-এ পাঠাচ্ছি…'});
   const r=await fetch(ghApi(`/issues/${issue}/comments`),{method:'POST',headers:ghHdr(true),signal:sig,
-    body:JSON.stringify({body:`@mesh ${req.text}${names.length?`\n\n📎 ${names.join(', ')}`:''}\n\n<!-- app:${Date.now()} -->`})});
+    body:JSON.stringify({body:`@mesh ${req.text}${names.length?`\n\n📎 ${names.join(', ')}`:''}\n\n<!-- app:${Date.now()} mode:${req.mode==='group'?'group':'agent'} -->`})});
   if(!r.ok)throw new Error(`GitHub HTTP ${r.status}`+(r.status===401?' — টোকেন ভুল/মেয়াদ শেষ':r.status===403?' — Issues: Write পারমিশন দিন':r.status===404?' — রিপো/Issue নম্বর দেখুন':''));
   onEv({type:'status',text:'পাঠানো হয়েছে — Actions চলছে (৩–৯ মিনিট লাগতে পারে)…'});
   onEv({type:'thinking',text:'ম্যানেজার কাজটা ভাগ করছে…'});
