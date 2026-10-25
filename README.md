@@ -1,2 +1,102 @@
 # agent-mesh-router
+
 A multi-agent orchestration framework for routing tasks across specialized agents, tools, and integrations.
+
+**ব্রেইন এখানেই থাকে** — রাউটার কোড এই রিপোতে, GitHub Actions এ চলে।
+পিসি, সার্ভার বা কার্ড কিছুই লাগে না। এজেন্টরা কাজ করে ওদের নিজের জায়গায়।
+
+---
+
+## 🚀 ৩ মিনিটে শুরু (বাংলা)
+
+```bash
+# ১) টিমে কারা আছে দেখুন
+python3 -m mesh.cli --list
+
+# ২) নিজে একবার পরীক্ষা করুন — কিছুই চালাবে না, শুধু দেখাবে
+python3 -m mesh.cli "হাই সবাই" --mode group --dry-run
+
+# ৩) কাজ ভাগ করে দিন (একজনকে)
+python3 -m mesh.cli "এই bug টা ঠিক করো" --mode direct
+
+# ৪) গ্রুপ চ্যাট (সবাই উত্তর দেয়, কেউ কাউকে @mention করতে পারে)
+python3 -m mesh.cli "হাই" --mode group
+```
+
+> 🔑 কোনো API key ছাড়াও **`--dry-run`** দিয়ে পুরো সিস্টেম পরীক্ষা করা যায়।
+
+---
+
+## 🧩 দুইটা মোড
+
+| মোড | কী হয় | কখন |
+|---|---|---|
+| 🎯 `direct` | রাউটার ঠিক করে **কে করবে**, শুধু তাকেই ডাকে (ব্যর্থ হলে ব্যাকআপ) | আসল কাজ |
+| 👥 `group` | সবাই একসাথে উত্তর দেয়; কেউ `@claude` লিখলে সে পরের রাউন্ডে উত্তর দেয় | আলোচনা / মত নেওয়া |
+
+## 👥 গ্রুপ চ্যাট = GitHub Issue
+
+- Issue এ `@mesh হাই` লিখলেই ওয়ার্কফ্লো ওঠে (`.github/workflows/mesh.yml`)
+- প্রতিটা উত্তর Issue-তে **comment** হিসেবে জমা হয় = স্থায়ী হলঘর
+- সবাই একসাথে, তারপর কেউ কাউকে ডাকলে পরের রাউন্ড
+
+## 🛡️ খরচ ও লুপ নিয়ন্ত্রণ
+
+`config/agents.json` এর `settings`:
+
+| সেটিং | অর্থ | ডিফল্ট |
+|---|---|---|
+| `max_rounds` | গ্রুপ চ্যাটে সর্বোচ্চ কত রাউন্ড | 3 |
+| `max_calls_per_run` | এক রানে মোট সর্বোচ্চ কত কল | 8 |
+| `max_pair_calls` | দুই এজেন্ট পরস্পরকে সর্বোচ্চ কতবার ডাকবে | 3 |
+
+**Key ঘোরানো:** `OPENROUTER_API_KEY`, `OPENROUTER_API_KEY_2`, … — একটা key রেট-লিমিটে আটকালে
+পরেরটা নিজে থেকেই ব্যবহার হয় (`mesh/keys.py`)। ২–৩টাই যথেষ্ট, বেশি ঘোরানো নিরাপদ নয়।
+
+---
+
+## 🧠 টিম (এবং কেন এমন)
+
+| এজেন্ট | ধরন | মাথা | key লাগে? |
+|---|---|---|---|
+| 🧑‍💻 **OpenCode** | CLI | DeepSeek V4.1 Flash (OpenCode এর ভেতরে ফ্রি) | ❌ |
+| 🟦 **Cline** | CLI | নিজের ফ্রি মডেল | ❌ |
+| 🟠 **Claude Code** | CLI | OpenRouter দিয়ে যেকোনো মডেল | ✅ OpenRouter |
+| ☤ **Hermes** | CLI | OpenRouter / নিজের পছন্দের মডেল | ✅ OpenRouter |
+| 🖐️ **OpenHands** | GitHub Issue | ওদের ক্লাউডে ফ্রি | ❌ |
+
+**সিদ্ধান্ত:** 🧠 ম্যানেজার = **আমাদের কোড** (কোনো AI কল নেই, ০ খরচ, ভুল করে না)।
+Hermes ও বাকিরা = **কর্মী**। বিস্তারিত: [`docs/design-bn.md`](docs/design-bn.md)
+
+---
+
+## 🔑 GitHub Secrets এ যা বসাতে হবে
+
+```
+OPENROUTER_API_KEY      # Claude Code + Hermes
+OPENROUTER_API_KEY_2    # (ঐচ্ছিক) ব্যাকআপ
+GEMINI_API_KEY          # (ঐচ্ছিক) ভবিষ্যতের ছোট রাউটারের জন্য
+XAI_API_KEY             # (ঐচ্ছিক) রিভিউয়ার / দ্বিতীয় মত
+```
+
+> 🚫 `GITHUB_TOKEN` এমনিতেই থাকে — `gh` দিয়ে Issue/comment করার জন্য।
+
+---
+
+## 🗂️ ফোল্ডার
+
+```
+config/agents.json      # টিমের তালিকা (নতুন এজেন্ট যোগ এখানেই)
+mesh/router.py          # 🧠 ম্যানেজার: direct + group, সীমা রক্ষা
+mesh/adapters.py        # এজেন্টের সাথে কথা বলার সেতু (cli / github_issue)
+mesh/keys.py            # key ঘোরানো
+mesh/chat.py            # চ্যাটের লগ (.mesh/transcript.jsonl)
+tests/                  # ১৮টা পরীক্ষা — key ছাড়াই চলে
+.github/workflows/      # ব্রেইন যেখানে চলে
+```
+
+## ✅ পরীক্ষা
+
+```bash
+python3 -m unittest discover -s tests -v
+```

@@ -1,0 +1,94 @@
+name: agent-mesh
+
+# 🧠 ব্রেইন এখানেই (GitHub Actions) — ম্যানেজার কোড এই রিপোতে থাকে।
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: "এজেন্টদের কী বলবেন?"
+        required: true
+        default: "হাই, নিজের পরিচয় দাও"
+      mode:
+        description: "কীভাবে চলবে?"
+        type: choice
+        default: direct
+        options:
+          - direct # ম্যানেজার কাজ ভাগ করে শুধু যার প্রযোজ্য তাকে ডাকে
+          - group  # সবাই একসাথে উত্তর দেয় (গ্রুপ চ্যাট)
+      dry_run:
+        description: "শুধু পরীক্ষা (কোনো এজেন্ট চালাবে না)"
+        type: boolean
+        default: true
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: mesh-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  route:
+    # Issue এ `@mesh` লিখলে গ্রুপ চ্যাট শুরু হয়
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@mesh'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ⚠️ এজেন্টের CLI গুলো ইনস্টল — একটা ব্যর্থ হলেও বাকিগুলো চলবে
+      - name: Install agent CLIs
+        continue-on-error: true
+        run: |
+          npm install -g @opencode/cli || true
+          npm install -g cline || true
+          # Claude Code / Hermes চাইলে নিচের লাইনগুলো চালু করুন:
+          # npm install -g @anthropic-ai/claude-code || true
+          # curl -fsSL https://hermes-agent.nousresearch.com/install.sh | sh || true
+
+      - name: Show team
+        run: python -m mesh.cli --list
+
+      - name: Route message
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_API_KEY_2: ${{ secrets.OPENROUTER_API_KEY_2 }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          MSG: ${{ github.event_name == 'workflow_dispatch' && inputs.message || github.event.comment.body }}
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'group' }}
+          ISSUE: ${{ github.event.issue.number || '' }}
+          DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: |
+          set -euo pipefail
+          args=(--mode "$MODE")
+          [ -n "$ISSUE" ] && args+=(--issue "$ISSUE")
+          [ "$DRY" = "true" ] && args+=(--dry-run)
+          python -m mesh.cli "$MSG" "${args[@]}" | tee mesh-output.txt
+
+      - name: Keep the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mesh-log
+          path: |
+            mesh-output.txt
+            .mesh/transcript.jsonl
+          if-no-files-found: ignore
+
+# 💡 ২৪/৭ চালু রাখতে চাইলে (৬০ দিন নিষ্ক্রিয় থাকলে শিডিউল বন্ধ হয়ে যায় — তাই বাইরে থেকে
+#    cron-job.org দিয়ে workflow_dispatch API কল করাই ভালো):
+#
+#  schedule:
+#    - cron: "0 */6 * * *"
