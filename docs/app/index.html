@@ -336,6 +336,15 @@ pre.contract{background:var(--code);border:1px solid var(--line);border-radius:1
     <input class="field" id="sToken" placeholder="টোকেন (ঐচ্ছিক)" autocapitalize="off" autocorrect="off" type="password">
     <button class="btn2" id="sTest"><span data-ic="refresh" data-s="18"></span>কানেকশন টেস্ট</button>
 
+    <div class="sec">কোন পথে কথা বলবে?</div>
+    <p class="note" id="sRouteNow">—</p>
+    <div class="row" id="sRoute">
+      <button class="btn2" data-r="auto">⚡ অটো</button>
+      <button class="btn2" data-r="worker">☁️ Cloudflare</button>
+      <button class="btn2" data-r="github">🐙 GitHub</button>
+      <button class="btn2" data-r="fast">🔑 নিজের key</button>
+    </div>
+
     <div class="sec">GitHub সরাসরি (Worker ছাড়া)</div>
     <p class="note">সার্ভার/Docker/Worker কিছুই লাগবে না — শুধু একটা GitHub টোকেন বসান, অ্যাপ নিজেই Issue-এ কথা বলে উত্তর নিয়ে আসবে। 📱 টোকেন শুধু আপনার ফোনে জমা থাকে।</p>
     <input class="field" id="sGhRepo" placeholder="owner/repo" autocapitalize="off" autocorrect="off">
@@ -450,15 +459,18 @@ const REAL_AGENTS=[
  {id:'claude',name:'Claude Code',role:'প্ল্যান/কোড',emoji:'🟠',color:'#d97757'},
  {id:'hermes',name:'Hermes',role:'ম্যানেজার',emoji:'☤',color:'#8b5cf6'},
  {id:'openhands',name:'OpenHands',role:'অটোমেশন',emoji:'🖐️',color:'#f59e0b'}];
-const cfg=Object.assign({theme:'dark',accent:'#d97757',fs:17,name:'',server:'',token:'',demo:true,lang:'bn-BD',speak:true,mode:'agent',ghRepo:'rashelmahmudpc-create/agent-mesh-router',ghIssue:'3',ghToken:'',fastMode:true,fastProvider:'groq',fastKey:'',fastModel:''},lsGet('ax.cfg',{}));
+const APP_V='2026-10-25.2'; // 🔖 সংস্করণ — সেটিংসে দেখা যায়
+const cfg=Object.assign({theme:'dark',accent:'#d97757',fs:17,name:'',server:'',token:'',demo:true,lang:'bn-BD',speak:true,mode:'agent',ghRepo:'rashelmahmudpc-create/agent-mesh-router',ghIssue:'3',ghToken:'',fastMode:true,fastProvider:'groq',fastKey:'',fastModel:'',route:'auto'},lsGet('ax.cfg',{}));
 const S={chats:lsGet('ax.chats',[]),cur:null,busy:false,ac:null,atts:[],agents:DEMO_AGENTS,conn:'demo',stick:true,dict:null};
 const ELS=new WeakMap();
 const saveCfg=()=>lsSet('ax.cfg',cfg);
-// ☁️ সার্ভারের ঠিকানা নিজে থেকে নাও — deploy workflow `docs/app/server.json` লিখে দেয়,
-// তাই কিছু হাতে বসাতে হয় না (নিজে কিছু বসানো থাকলে সেটাই প্রাধান্য পাবে)
+// ☁️ সার্ভারের ঠিকানা নিজে থেকে নাও — deploy workflow `docs/app/server.json` লিখে দেয়।
+// ghToken/key আগে থেকে বসানো থাকলেও Worker পাওয়া গেলে সেটাই ব্যবহার হবে (route=auto);
+// ব্যবহারকারী সেটিংসে বেছে নিলে (github / fast) সেটাই মানা হবে।
 (async()=>{
   try{
-    if(cfg.server||cfg.ghToken||cfg.fastKey)return;      // ব্যবহারকারীর নিজের সেটিং থাকলে ছুঁব না
+    if(cfg.route==='github'||cfg.route==='fast')return;   // নিজে বেছে নিয়েছে
+    if(cfg.route==='worker'&&cfg.server)return;           // নিজের worker আগেই বসানো
     const r=await fetch('server.json',{cache:'no-store'});
     if(!r.ok)return;
     const j=await r.json();
@@ -466,14 +478,18 @@ const saveCfg=()=>lsSet('ax.cfg',cfg);
     if(!url)return;
     cfg.server=url;cfg.demo=false;saveCfg();
     const box=$('#sServer');if(box)box.value=url;
+    try{buildSettings()}catch{}
     try{ping()}catch{}
   }catch{}
 })();
 const saveChats=()=>lsSet('ax.chats',S.chats.slice(0,60));
-// ফাঁকা সার্ভার + GitHub টোকেন থাকলে = "GitHub সরাসরি" মোড (Worker ছাড়া)
-const isGh=()=>!cfg.server.trim()&&!!String(cfg.ghToken||'').trim();
-// ⚡ দ্রুত মোড: ফ্রি AI কী থাকলে সেকেন্ডেই উত্তর (সার্ভার লাগে না)
-const fastOn=()=>!!cfg.fastMode&&!!String(cfg.fastKey||'').trim();
+// ☁️ Worker-এর ঠিকানা থাকলে সেটাই সবার আগে (দ্রুততম পথ)
+const workerOn=()=>!!String(cfg.server||'').trim();
+// ফাঁকা সার্ভার + GitHub টোকেন = "GitHub সরাসরি" (ধীর: ৩–৯ মিনিট)
+const isGh=()=>!workerOn()&&cfg.route!=='fast'&&!!String(cfg.ghToken||'').trim();
+// ⚡ নিজের key — শুধু Worker না থাকলে
+const fastOn=()=>!workerOn()&&!!cfg.fastMode&&!!String(cfg.fastKey||'').trim();
+const routeName=()=>workerOn()?'☁️ Cloudflare (দ্রুত)':isGh()?'🐙 GitHub (ধীর)':fastOn()?'🔑 নিজের key':isDemo()?'🧪 ডেমো':'—';
 const isDemo=()=>cfg.demo||(!cfg.server.trim()&&!isGh()&&!fastOn());
 const curChat=()=>S.chats.find(c=>c.id===S.cur);
 const feed=$('#feed'),scroller=$('#scroll'),inp=$('#inp');
@@ -1132,6 +1148,10 @@ function buildSettings(){
   $('#sServer').value=cfg.server;$('#sToken').value=cfg.token;
   $('#sGhRepo').value=cfg.ghRepo;$('#sGhIssue').value=cfg.ghIssue;$('#sGhToken').value=cfg.ghToken;
   $('#sFastProv').value=cfg.fastProvider;$('#sFastKey').value=cfg.fastKey;$('#sFastModel').value=cfg.fastModel;
+  const rn=$('#sRouteNow');
+  if(rn)rn.innerHTML='এখন চলছে: <b>'+routeName()+'</b>'+(workerOn()?'<br><span class="note">'+esc(cfg.server)+'</span>':'')
+    +'<br><span class="note">সংস্করণ '+APP_V+'</span>';
+  $$('#sRoute [data-r]').forEach(b=>b.classList.toggle('on',(cfg.route||'auto')===b.dataset.r));
   $('#sFast').classList.toggle('on',!!cfg.fastMode);
   $('#sSpeak').classList.toggle('on',cfg.speak);$('#sDemo').classList.toggle('on',cfg.demo);
 }
@@ -1144,6 +1164,13 @@ $('#sLang').onchange=e=>{cfg.lang=e.target.value;saveCfg()};
 $('#sSpeak').onclick=()=>{cfg.speak=!cfg.speak;saveCfg();buildSettings()};
 $('#sDemo').onclick=()=>{cfg.demo=!cfg.demo;saveCfg();buildSettings();ping()};
 $('#sServer').onchange=e=>{cfg.server=e.target.value.trim();if(cfg.server)cfg.demo=false;saveCfg();buildSettings();ping()};
+$('#sRoute').onclick=e=>{
+  const b=e.target.closest('[data-r]');if(!b)return;
+  cfg.route=b.dataset.r;
+  if(cfg.route==='github'){cfg.server='';const el=$('#sServer');if(el)el.value='';}
+  if(cfg.route==='worker'&&!workerOn())toast('আগে Worker-এর ঠিকানা বসান');
+  cfg.demo=false;saveCfg();buildSettings();ping();
+};
 $('#sToken').onchange=e=>{cfg.token=e.target.value.trim();saveCfg();ping()};
 /* GitHub সরাসরি — টোকেন বসালেই ডেমো বন্ধ হয়ে আসল উত্তর আসবে */
 $('#sGhRepo').onchange=e=>{cfg.ghRepo=e.target.value.trim();saveCfg();ping()};
