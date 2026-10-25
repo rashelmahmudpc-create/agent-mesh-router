@@ -19,6 +19,20 @@ class BrainTest(unittest.TestCase):
         for heading in ("ZAYAN GLOBAL BRAIN", "RASHEL ZAYAN", "PRIORITIES", "AdmissionSky"):
             self.assertIn(heading, text)
 
+    def test_all_sections_present(self):
+        text = BRAIN.read_text(encoding="utf-8")
+        for n in range(1, 18):
+            self.assertIn(f"## {n}.", text, f"সেকশন {n} নেই")
+        for appendix in ("APPENDIX A", "APPENDIX B", "APPENDIX C"):
+            self.assertIn(appendix, text)
+
+    def test_handoff_template_exists(self):
+        readme = ROOT / "docs/handoffs/README.md"
+        self.assertTrue(readme.exists())
+        body = readme.read_text(encoding="utf-8")
+        for field in ("**Asked:**", "**Verified:**", "**Still open:**", "**Do not touch:**"):
+            self.assertIn(field, body)
+
     def test_every_agent_pointer_points_to_brain(self):
         for name in POINTERS:
             path = ROOT / name
