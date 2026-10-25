@@ -191,8 +191,11 @@ def _last_text(conversation) -> str:
     texts = [(type(e).__name__.lower(), _event_text(e)) for e in _all_events(conversation)]
     texts = [(name, text) for name, text in texts if text]
     if texts:
-        plain = [text for name, text in texts if "action" not in name]
-        return plain[-1] if plain else texts[-1][1]
+        # 🔚 finish tool-এর উত্তরটাই আসল চূড়ান্ত কথা — মাঝপথের "ভাবছি…" বাদ
+        final = [text for name, text in texts if "action" in name]
+        if final:
+            return final[-1]
+        return texts[-1][1]
 
     # পুরনো/সরল attr
     for attr in ("last_response", "final_response", "response"):
