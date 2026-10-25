@@ -10,8 +10,11 @@ MENTION_RE = re.compile(r"@([A-Za-z0-9][A-Za-z0-9_-]*)")
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 MESH_CALL_RE = re.compile(r"^\s*@mesh\b[ \t]*", re.IGNORECASE)
 
-# 📱 অ্যাপের comment-এ যা থাকে: `<!-- app:1792950773735 mode:agent -->`
+# 📱 অ্যাপের comment-এ যা থাকে: `<!-- app:1792950773735 mode:agent targets:opencode,hermes -->`
 APP_MARKER_RE = re.compile(r"<!--\s*app:[^>]*?mode:(agent|group)\s*-->", re.IGNORECASE)
+APP_TARGETS_RE = re.compile(
+    r"<!--\s*app:[^>]*?targets:([a-zA-Z0-9_,\-]+)", re.IGNORECASE
+)
 
 # টার্মিনালের রঙ/কার্সর কোড — Issue এ গেলে অদ্ভুত অক্ষর দেখায়
 ANSI_RE = re.compile(r"(?:\x1b|◈)\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\[\d+m")
@@ -68,6 +71,22 @@ def app_mode_of(text: str) -> str:
     """
     match = APP_MARKER_RE.search(text or "")
     return match.group(1).lower() if match else ""
+
+
+def app_targets_of(text: str) -> list[str]:
+    """অ্যাপের ড্রপ-ডাউন থেকে বাছা এজেন্টদের নাম — না বাছলে খালি তালিকা।
+
+    একজনে টিক = শুধু সে-ই উত্তর দেবে; একাধিকে টিক = যাদের টিক দিয়েছেন সবাই।
+    """
+    match = APP_TARGETS_RE.search(text or "")
+    if not match:
+        return []
+    out: list[str] = []
+    for raw in match.group(1).split(","):
+        name = raw.strip().lower()
+        if name and name not in out:
+            out.append(name)
+    return out
 
 
 def clean_prompt(text: str) -> str:

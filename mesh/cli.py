@@ -18,7 +18,7 @@ from .chat import default_store
 from .issue import fetch_hall, post_comment
 from .config import MeshConfig
 from .router import Router
-from .textutil import app_mode_of
+from .textutil import app_mode_of, app_targets_of
 
 
 def _print_list(config: MeshConfig) -> None:
@@ -76,6 +76,10 @@ def main(argv: list[str] | None = None) -> int:
         "--no-hall", action="store_true",
         help="Issue-এর পুরনো comment পটভূমি হিসেবে নিও না (অ্যাপ নিজেই আগের কথা পাঠায়)",
     )
+    parser.add_argument(
+        "--agents", default="", metavar="a,b",
+        help="🎯 শুধু এই এজেন্টরাই উত্তর দেবে (কমা দিয়ে আলাদা; খালি = সবার নিয়ম)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="কিছু চালাবে না, শুধু দেখাবে")
     parser.add_argument("--json", action="store_true", help="মেশিন-পাঠ্য আউটপুট")
     parser.add_argument(
@@ -102,13 +106,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    # 📱 অ্যাপ থেকে এলে (মার্কারে mode থাকে) মোড আর পটভূমি নিজেই ঠিক করি —
+    # 📱 অ্যাপ থেকে এলে (মার্কারে mode/targets থাকে) মোড, পটভূমি আর বাছা এজেন্ট নিজেই ঠিক করি —
     # workflow-এ কিছু বদলাতে না হলেও অ্যাপ ঠিকঠাক চলে।
     app_mode = app_mode_of(args.message)
     if app_mode:
         if app_mode == "agent":
             args.mode = "direct"  # 👤 একজনই উত্তর দেবে (দ্রুত, কম হট্টগোল)
         args.no_hall = True       # Issue-এর পুরনো comment বাদ — অ্যাপ নিজের কথা পাঠায়
+    picked = app_targets_of(args.message)  # 🎯 drop-down থেকে বাছা এজেন্ট
+    if picked:
+        # একজনে টিক = শুধু সে-ই; একাধিকে টিক = সবাই (গ্রুপেই স্বাভাবিক)
+        if not app_mode and len(picked) == 1:
+            args.mode = "direct"
+        args.no_hall = True
+    if args.agents:
+        picked = [n.strip().lower() for n in args.agents.split(",") if n.strip()]
 
     config = MeshConfig.load(args.config)
 
@@ -191,9 +203,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"🏛️ Issue #{args.issue} এর আগের আলোচনা পড়া হয়েছে ({len(history)} অক্ষর)", file=sys.stderr)
 
     replies = (
-        router.group(args.message, history=history)
+        router.group(args.message, history=history, only=picked)
         if args.mode == "group"
-        else router.direct(args.message)
+        else router.direct(args.message, only=picked)
     )
 
     if args.issue:
