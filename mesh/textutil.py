@@ -84,7 +84,14 @@ def clean_reply(text: str) -> str:
         if any(noise in low for noise in NOISE_LINES):
             continue
         out.append(raw)
-    return "\n".join(out).strip()
+    cleaned = "\n".join(out).strip()
+    if cleaned:
+        return cleaned
+    # সব লেখা reasoning বক্সে ঢাকা পড়লে (বক্স বন্ধ না হলে) খালি উত্তর না দিয়ে
+    # কাঁচা লেখাটাই ফেরত দিই — অসম্পূর্ণ উত্তরও খালি উত্তরের চেয়ে ভালো।
+    salvage = [line for line in strip_ansi(text).splitlines()
+               if line.strip() and not any(noise in line.lower() for noise in NOISE_LINES)]
+    return "\n".join(salvage).strip()
 
 
 def clip(text: str, limit: int) -> str:

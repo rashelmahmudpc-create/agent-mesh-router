@@ -132,6 +132,41 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "--- keycheck ---"; cat keys.md
 
+      - name: 🖐️ OpenHands live check (দিনে একবার)
+        if: steps.guard.outputs.skip != 'true'
+        continue-on-error: true
+        # 🖐️ OpenHands key আসলেই কাজ করে কি না — দিনে একবার সত্যিকারের এক conversation
+        env:
+          OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+        run: |
+          set -uo pipefail
+          TODAY=$(date -u '+%Y-%m-%d')
+          LAST=$(tr -d '[:space:]' < .mesh-openhands-ok 2>/dev/null || true)
+          if [ "$LAST" = "$TODAY" ]; then
+            echo "⏭️ আজ ($TODAY) OpenHands আগেই ✅ হয়েছে — কোটা বাঁচাতে আবার চালালাম না" | tee openhands.txt
+            exit 0
+          fi
+          if [ -z "${OPENHANDS_API_KEY:-}" ]; then
+            echo "❌ OPENHANDS_API_KEY নেই — GitHub → Settings → Secrets এ যোগ করুন" | tee openhands.txt
+            exit 0
+          fi
+          python -m mesh.cli --openhands "এক লাইনে বলো: তুমি কাজ করছো কি না" > openhands.txt 2>&1 || true
+          {
+            echo "## 🖐️ OpenHands লাইভ পরীক্ষা"
+            echo ""
+            echo '```'
+            cat openhands.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if grep -q '^✅' openhands.txt; then
+            echo "$TODAY" > .mesh-openhands-ok
+            git config user.name "mesh-bot"
+            git config user.email "mesh-bot@users.noreply.github.com"
+            git add .mesh-openhands-ok
+            git commit -m "chore: OpenHands লাইভ পরীক্ষা ✅ $TODAY" || true
+            git push || true
+          fi
+
       - name: Doctor (কে সাড়া দেবে?)
         if: steps.guard.outputs.skip != 'true'
         continue-on-error: true
@@ -244,6 +279,14 @@ jobs:
             echo ""
             echo "</details>"
             echo ""
+            echo "<details><summary>🖐️ OpenHands লাইভ পরীক্ষা</summary>"
+            echo ""
+            echo '```'
+            cat openhands.txt 2>/dev/null || echo "(আজ চালানো হয়নি)"
+            echo '```'
+            echo ""
+            echo "</details>"
+            echo ""
             echo "<details><summary>📋 উত্তর</summary>"
             echo ""
             echo '```'
@@ -271,6 +314,7 @@ jobs:
             mesh-output.txt
             doctor.txt
             team.txt
+            openhands.txt
             status.md
             .mesh/transcript.jsonl
           if-no-files-found: ignore
