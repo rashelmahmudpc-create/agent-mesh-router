@@ -185,7 +185,8 @@ mesh/adapters.py        # এজেন্টের সাথে কথা বল
 mesh/keys.py            # key ঘোরানো
 mesh/chat.py            # চ্যাটের লগ (.mesh/transcript.jsonl)
 mesh/doctor.py          # 🩺 স্বাস্থ্য পরীক্ষা
-tests/                  # ২৭টা পরীক্ষা — key ছাড়াই চলে
+mesh/models.py           # 🆓 প্রতি রানে ফ্রি মডেল খুঁজে নেয়
+tests/                  # ৭৭টা পরীক্ষা — key ছাড়াই চলে
 docs/handoffs/          # 📮 কাজের হ্যান্ডঅফ
 .github/workflows/      # ব্রেইন যেখানে চলে (mesh.yml) + পরীক্ষা (ci.yml)
 ```
