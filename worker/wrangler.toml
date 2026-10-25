@@ -1,5 +1,5 @@
 # 🔌 এজেন্ট টিম — Cloudflare Worker সেটিংস
-# গোপন তথ্য এখানে নয় → `wrangler secret put ...`
+# গোপন তথ্য এখানে নয় → Cloudflare ড্যাশবোর্ডে (Settings → Variables and Secrets)
 
 name = "mesh-chat"
 main = "index.js"
@@ -9,13 +9,28 @@ compatibility_date = "2026-01-01"
 MESH_REPO = "rashelmahmudpc-create/agent-mesh-router"
 MESH_ISSUE = "3"
 ALLOWED_ORIGIN = "*"
-# ⏱️ উত্তর কতক্ষণ অপেক্ষা করবে (মিলিসেকেন্ড)। খালি রাখলে ডিফল্ট ৫ মিনিট।
-# Actions রান সাধারণত ৩–৯ মিনিট নেয় — খুব কম দিলে অ্যাপে উত্তর আসবে না।
-# MAX_WAIT_MS = "300000"
 
-# 🔑 একবার করে চালান (টার্মিনালে):
-#   npx wrangler secret put GITHUB_TOKEN    # fine-grained PAT, Issues: Read & Write
-#   npx wrangler secret put APP_TOKEN       # অ্যাপের সেটিংসে যে টোকেন বসাবেন
-# তারপর:
+# ⚡ দ্রুত লেন: মডেল API সরাসরি → উত্তর ৩–৮ সেকেন্ড (Actions ৮–১০ মিনিটের বদলে)
+# "off" দিলে পুরনো Actions পথে ফিরে যাবে।
+FAST = "on"
+# ⏱️ এক এজেন্টের জন্য সর্বোচ্চ অপেক্ষা (মিলিসেন্ড)
+FAST_TIMEOUT_MS = "20000"
+# 🤖 চাইলে মডেল বদলান (খালি = ডিফল্ট)
+# FAST_MODEL_OPENROUTER = "openrouter/free"
+# FAST_MODEL_GROQ = "llama-3.3-70b-versatile"
+# FAST_MODEL_GEMINI = "gemini-2.0-flash"
+
+# 🐢 পুরনো Actions পথের জন্য (FAST=off হলে)
+# POLL_MS = "3000"
+# QUIET_MS = "12000"
+# MAX_WAIT_MS = "600000"
+
+# 🔑 Secrets যা লাগবে (ড্যাশবোর্ডে বসান — এখানে কোথাও লিখবেন না):
+#   GITHUB_TOKEN          → fine-grained PAT, Issues: Read & Write   (উত্তর Issue-এ ফিরবে)
+#   APP_TOKEN             → অ্যাপের Settings-এ যে টোকেন বসাবেন
+#   OPENROUTER_API_KEY    → ⚡ দ্রুত লেন
+#   GROQ_API_KEY          → ⚡ দ্রুত লেন
+#   GEMINI_API_KEY        → ⚡ দ্রুত লেন
+#
+# 🖥️ নিজে ডিপ্লয় করতে:
 #   npx wrangler deploy
-

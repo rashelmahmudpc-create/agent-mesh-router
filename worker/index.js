@@ -117,17 +117,23 @@ async function handleHealth(env) {
   }
   const res = await gh(env, issuePath(env));
   if (!res.ok) return { ok: false, error: `GitHub: HTTP ${res.status}` };
-  return { ok: true, repo: env.MESH_REPO, issue: Number(env.MESH_ISSUE), title: res.data?.title || "" };
+  return {
+    ok: true,
+    repo: env.MESH_REPO,
+    issue: Number(env.MESH_ISSUE),
+    title: res.data?.title || "",
+    fast: fastReady(env),
+    providers: fastProviders(env),
+  };
 }
 
 function handleAgents() {
-  const ids = ["opencode", "claude", "hermes"];
-  return ids.map((id) => ({
-    id,
-    name: id.charAt(0).toUpperCase() + id.slice(1),
-    role: ROLE[id],
-    emoji: EMOJI[id],
-    color: COLOR[id],
+  return PERSONAS.map((p) => ({
+    id: p.id,
+    name: p.name,
+    role: p.role,
+    emoji: p.emoji,
+    color: COLOR[p.id] || "#888888",
   }));
 }
 
@@ -191,7 +197,235 @@ function sse(env, run) {
 }
 
 
-async function handleChat(request, env) {
+/* ================= ⚡ দ্রুত লেন — সরাসরি মডেল API =================
+ *
+ * কেন: Actions রান ৮–১০ মিনিট নেয়, কারণ প্রতিবার opencode/claude/hermes ইনস্টল হয়।
+ * এখানে কোনো ইনস্টল নেই — চারটা এজেন্টের persona নিয়ে সরাসরি মডেল API-তে
+ * **সমান্তরালে** কল যায়, তাই উত্তর ৩–৮ সেকেন্ডে। উত্তর সাথে সাথে SSE-তে যায়,
+ * আর Issue #3-এ comment পোস্ট হয় পেছনে (ctx.waitUntil), যাতে অপেক্ষা না বাড়ে।
+ *
+ * env:
+ *   FAST=off                     → পুরনো Actions পথ
+ *   OPENROUTER_API_KEY (+_2) / GROQ_API_KEY / GEMINI_API_KEY
+ *   FAST_MODEL_OPENROUTER / FAST_MODEL_GROQ / FAST_MODEL_GEMINI
+ *   FAST_TIMEOUT_MS              → ডিফল্ট ২০০০০
+ */
+
+const FAST_RULES = [
+  "তুমি বাংলায় উত্তর দাও — সহজ, কাজের, স্যার সম্বোধন করে।",
+  "সর্বোচ্চ ৪–৫ লাইন। আগে সারমর্ম, তারপর দরকার হলে ছোট বুলেট।",
+  "যা জানো না তা বানিও না; দরকার হলে এক লাইনে বলে দাও কী তথ্য লাগবে।",
+  "কোনো secret, key বা পাসওয়ার্ড কখনো লিখো না।",
+].join(" ");
+
+const PERSONAS = [
+  {
+    id: "opencode", emoji: "🧑‍💻", name: "OpenCode", role: "কোডিং",
+    chain: ["groq", "openrouter", "gemini"],
+    style: "তুমি OpenCode — দলের কোডিং worker। কোড লাগলে সংক্ষিপ্ত, চালু-করা-যায় এমন কোড দাও।",
+  },
+  {
+    id: "claude", emoji: "🟠", name: "Claude Code", role: "আর্কিটেকচার",
+    chain: ["openrouter", "gemini", "groq"],
+    style: "তুমি Claude Code — আর্কিটেকচার ও পর্যালোচনার এজেন্ট। দুইটা বিকল্প দিয়ে দ্বিধা ভাঙো।",
+  },
+  {
+    id: "hermes", emoji: "☤", name: "Hermes", role: "মেমরি",
+    chain: ["openrouter", "groq", "gemini"],
+    style: "তুমি Hermes — স্মৃতি ও পরিকল্পনার এজেন্ট। সিদ্ধান্ত মনে রাখো, ধাপে ধাপে বলো।",
+  },
+  {
+    id: "openhands", emoji: "🖐️", name: "OpenHands", role: "বড় কাজ",
+    chain: ["gemini", "openrouter", "groq"],
+    style: "তুমি OpenHands — বড় কাজের এজেন্ট। কাজটা ছোট ধাপে ভাগ করে প্রথম ধাপটা বলো।",
+  },
+];
+
+const PROVIDERS = {
+  groq: {
+    url: () => "https://api.groq.com/openai/v1/chat/completions",
+    key: (env) => env.GROQ_API_KEY,
+    model: (env) => env.FAST_MODEL_GROQ || "llama-3.3-70b-versatile",
+    headers: (key) => ({ "content-type": "application/json", authorization: `Bearer ${key}` }),
+    body: (env, model, system, user) => ({
+      model,
+      messages: [{ role: "system", content: system }, { role: "user", content: user }],
+      max_tokens: 400,
+      temperature: 0.4,
+    }),
+    parse: (d) => d?.choices?.[0]?.message?.content,
+  },
+  openrouter: {
+    url: () => "https://openrouter.ai/api/v1/chat/completions",
+    key: (env) => env.OPENROUTER_API_KEY || env.OPENROUTER_API_KEY_2,
+    model: (env) => env.FAST_MODEL_OPENROUTER || "openrouter/free",
+    headers: (key) => ({
+      "content-type": "application/json",
+      authorization: `Bearer ${key}`,
+      "http-referer": "https://github.com/rashelmahmudpc-create/agent-mesh-router",
+      "x-title": "agent-mesh-router",
+    }),
+    body: (env, model, system, user) => ({
+      model,
+      messages: [{ role: "system", content: system }, { role: "user", content: user }],
+      max_tokens: 400,
+      temperature: 0.4,
+    }),
+    parse: (d) => d?.choices?.[0]?.message?.content,
+  },
+  gemini: {
+    url: (env, model) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    key: (env) => env.GEMINI_API_KEY,
+    model: (env) => env.FAST_MODEL_GEMINI || "gemini-2.0-flash",
+    headers: (key) => ({ "content-type": "application/json", "x-goog-api-key": key }),
+    body: (env, model, system, user) => ({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: "user", parts: [{ text: user }] }],
+      generationConfig: { maxOutputTokens: 400, temperature: 0.4 },
+    }),
+    parse: (d) => (d?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join(""),
+  },
+};
+
+/** কোন provider-গুলো এই মুহূর্তে চাবি পেয়েছে */
+function fastProviders(env) {
+  return Object.keys(PROVIDERS).filter((name) => Boolean(PROVIDERS[name].key(env)));
+}
+
+/** ⚡ দ্রুত লেন চালু? (key থাকলে + FAST=off না হলে) */
+function fastReady(env) {
+  return String(env.FAST || "").toLowerCase() !== "off" && fastProviders(env).length > 0;
+}
+
+function personaAgent(persona) {
+  return {
+    id: persona.id,
+    name: persona.name,
+    emoji: persona.emoji,
+    role: persona.role,
+    color: COLOR[persona.id] || "#888888",
+  };
+}
+
+/** একটা এজেন্টের উত্তর — provider চেইন ধরে, সময় শেষ হলে ছেড়ে দেয় */
+async function askModel(env, persona, message) {
+  const timeout = Number(env.FAST_TIMEOUT_MS) || 20000;
+  const system = `${FAST_RULES}\n\n${persona.style}\n\nতোমার নাম ${persona.name} (${persona.emoji})।`;
+  const failures = [];
+  for (const name of persona.chain) {
+    const provider = PROVIDERS[name];
+    const key = provider.key(env);
+    if (!key) {
+      failures.push(`${name}: key নেই`);
+      continue;
+    }
+    const model = provider.model(env);
+    const started = Date.now();
+    try {
+      const res = await fetch(provider.url(env, model), {
+        method: "POST",
+        headers: provider.headers(key),
+        body: JSON.stringify(provider.body(env, model, system, message)),
+        signal: AbortSignal.timeout(timeout),
+      });
+      const raw = await res.text();
+      let data = null;
+      try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+      if (!res.ok) {
+        failures.push(`${name}: HTTP ${res.status}`);
+        continue;
+      }
+      const out = String(provider.parse(data) || "").trim();
+      if (!out) {
+        failures.push(`${name}: খালি উত্তর`);
+        continue;
+      }
+      return { ok: true, text: out, provider: name, model, ms: Date.now() - started };
+    } catch (err) {
+      failures.push(`${name}: ${String(err).slice(0, 60)}`);
+    }
+  }
+  return { ok: false, text: "", provider: "", ms: 0, failures };
+}
+
+/** উত্তরে কী কী model/key লেগেছে — কোথাও key ছাপা হয় না */
+async function postAnswers(env, rows) {
+  if (!env.GITHUB_TOKEN || !env.MESH_REPO || !env.MESH_ISSUE) return { posted: 0 };
+  let posted = 0;
+  await Promise.all(
+    rows.map(async (row) => {
+      const body =
+        `<!-- mesh:${row.agent.id} -->\n**${row.agent.emoji} ${row.agent.name}**\n\n${row.text}` +
+        `\n\n_⚡ দ্রুত লেন · ${row.provider} · ${row.ms}ms_`;
+      const res = await gh(env, issuePath(env, "/comments"), {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      });
+      if (res.ok) posted += 1;
+    }),
+  );
+  return { posted };
+}
+
+/** ⚡ মূল দ্রুত পথ — চার এজেন্ট সমান্তরালে, যে আগে শেষ হয় তার উত্তর আগে */
+async function handleFastChat(env, ctx, payload) {
+  const text = String(payload?.message || "").trim();
+  const mode = payload?.mode === "group" ? "group" : "agent";
+  const names = (Array.isArray(payload?.attachments) ? payload.attachments : [])
+    .map((f) => f?.name)
+    .filter(Boolean);
+  const question = `${text}${names.length ? `\n\n📎 সংযুক্ত ফাইল: ${names.join(", ")}` : ""}`;
+  const startedAt = Date.now();
+
+  return sse(env, async (send) => {
+    const providers = fastProviders(env);
+    send({ type: "status", text: `⚡ দ্রুত লেন — ${PERSONAS.length} এজেন্ট একসাথে (${providers.join(", ")})` });
+    send({ type: "tool", id: "fast", name: "দ্রুত লেন", input: providers.join(", "), state: "running" });
+
+    const answered = [];
+    const pending = PERSONAS.map(async (persona) => {
+      const agent = personaAgent(persona);
+      const result = await askModel(env, persona, question);
+      if (!result.ok) {
+        send({ type: "status", text: `${agent.emoji} ${agent.name}: ${result.failures.slice(0, 2).join(" · ")}` });
+        return;
+      }
+      agent.streamId = `f${persona.id}${Date.now()}`;
+      send({ type: "typing", agent });
+      await emitText(send, result.text, agent);
+      send({ type: "agent_message", id: agent.streamId, agent, text: result.text });
+      answered.push({ agent, text: result.text, provider: result.provider, ms: result.ms });
+    });
+
+    await Promise.all(pending);
+
+    send({
+      type: "tool_result",
+      id: "fast",
+      output: `${answered.length}টি উত্তর · ${((Date.now() - startedAt) / 1000).toFixed(1)} সেকেন্ড`,
+    });
+
+    if (mode === "agent" && answered.length) {
+      const block = answered
+        .map((r) => `### ${r.agent.emoji} ${r.agent.name}\n\n${r.text}\n\n`)
+        .join("");
+      send({ type: "final", text: block });
+    }
+    if (!answered.length) {
+      send({
+        type: "error",
+        message: "কোনো মডেল উত্তর দিল না — key (OPENROUTER/GROQ/GEMINI) দেখুন, বা FAST=off করে Actions পথ ব্যবহার করুন",
+      });
+    }
+
+    // 📮 Issue #3-এ পেছনে পোস্ট — উত্তরের গতি যেন না কমে
+    const job = postAnswers(env, answered);
+    if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(job);
+    else await job;
+  });
+}
+
+async function handleChat(request, env, ctx) {
   let payload;
   try { payload = await request.json(); } catch { return json({ error: "JSON ঠিক নেই" }, 400, env); }
 
@@ -200,6 +434,11 @@ async function handleChat(request, env) {
   const files = Array.isArray(payload?.attachments) ? payload.attachments : [];
   if (!text && !files.length) return json({ error: "কিছু লেখা হয়নি" }, 400, env);
   if (text.length > MAX_TEXT) return json({ error: "বেশি বড় — ছোট করে লিখুন" }, 413, env);
+
+  // ⚡ key থাকলে আগে দ্রুত লেন (৩–৮ সেকেন্ড), নইলে পুরনো Actions পথ
+  if (fastReady(env)) {
+    return await handleFastChat(env, ctx, payload);
+  }
 
   const names = files.map((f) => f?.name).filter(Boolean);
   const body = `@mesh ${text}${names.length ? `\n\n📎 ${names.join(", ")}` : ""}\n\n<!-- app:${Date.now()} -->`;
@@ -280,7 +519,7 @@ async function handleChat(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
@@ -303,7 +542,7 @@ export default {
         return json(out.body, out.status, env);
       }
       if (url.pathname === "/api/chat" && request.method === "POST") {
-        return await handleChat(request, env);
+        return await handleChat(request, env, ctx);
       }
       return json({ ok: false, error: "কোনো এমন ঠিকানা নেই" }, 404, env);
     } catch (err) {

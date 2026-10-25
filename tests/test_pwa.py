@@ -162,3 +162,46 @@ class NodeSideTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
+
+class FastLaneTest(unittest.TestCase):
+    """⚡ Cloudflare-এর দ্রুত লেন — Actions ছাড়াই ৩–৮ সেকেন্ডে উত্তর।"""
+
+    def setUp(self):
+        self.worker = (ROOT / "worker" / "index.js").read_text(encoding="utf-8")
+
+    def test_direct_model_calls_exist(self):
+        for url in (
+            "api.groq.com",
+            "openrouter.ai/api/v1/chat/completions",
+            "generativelanguage.googleapis.com",
+        ):
+            self.assertIn(url, self.worker, f"{url} কল নেই")
+
+    def test_four_agents_answer_in_parallel(self):
+        self.assertIn("PERSONAS", self.worker)
+        self.assertIn("Promise.all", self.worker)
+        for name in ("OpenCode", "Claude Code", "Hermes", "OpenHands"):
+            self.assertIn(name, self.worker, f"{name} persona নেই")
+
+    def test_fast_lane_can_be_switched_off(self):
+        self.assertIn('"off"', self.worker)
+        self.assertIn("FAST", self.worker)
+        # key না থাকলে নিজে থেকেই পুরনো পথে
+        self.assertIn("fastReady", self.worker)
+
+    def test_answers_still_reach_the_issue(self):
+        self.assertIn("postAnswers", self.worker)
+        self.assertIn("waitUntil", self.worker)  # পেছনে পোস্ট, গতি কমে না
+
+    def test_fast_lane_never_posts_at_mesh(self):
+        """দ্রুত লেনের comment যেন Actions রান না ডাকে (@mesh / মার্কার যাচাই)।"""
+        block = self.worker.split("async function handleFastChat")[1].split("async function handleChat")[0]
+        self.assertNotIn("@mesh ", block)
+        self.assertIn("<!-- mesh:", self.worker)
+
+    def test_deploy_workflow_skips_without_secrets(self):
+        wf = (ROOT / ".github" / "workflows" / "worker.yml").read_text(encoding="utf-8")
+        self.assertIn("CF_API_TOKEN", wf)
+        self.assertIn("skip=true", wf)  # secret না থাকলে চুপচাপ বাদ
+        self.assertIn("wrangler-action", wf)

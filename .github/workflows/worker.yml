@@ -1,0 +1,73 @@
+name: worker
+
+# ☁️ Cloudflare Worker নিজে থেকে ডিপ্লয় হবে (কোড পেস্ট করার ঝামেলা নেই)
+#
+# দরকার শুধু ২টা secret (Settings → Secrets and variables → Actions):
+#   CF_API_TOKEN   → Cloudflare → My Profile → API Tokens → Create Token
+#                    ("Edit Cloudflare Workers" টেমপ্লেট)
+#   CF_ACCOUNT_ID  → Cloudflare ড্যাশবোর্ডের ডান পাশে Account ID
+# না থাকলে এই workflow চুপচাপ বাদ যাবে (কিছু ভাঙবে না)।
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "worker/**"
+      - ".github/workflows/worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worker-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cloudflare secret আছে কি?
+        id: gate
+        env:
+          TOKEN: ${{ secrets.CF_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "⏭️ CF_API_TOKEN / CF_ACCOUNT_ID নেই — ডিপ্লয় বাদ (ড্যাশবোর্ড থেকে কোড পেস্ট করলেও চলবে)"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          node-version: "22"
+
+      - name: Worker টেস্ট
+        if: steps.gate.outputs.skip != 'true'
+        run: node tests/js/worker_check.mjs
+
+      - name: Deploy → Cloudflare
+        if: steps.gate.outputs.skip != 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy
+
+      - name: লেখো (কোথায় গেল)
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          {
+            echo "## ☁️ Worker ডিপ্লয় হয়েছে"
+            echo ""
+            echo "ঠিকানা: \`https://mesh-chat.<আপনার-সাবডোমেইন>.workers.dev\`"
+            echo ""
+            echo "ওই ঠিকানাটা অ্যাপের **Settings → Server (apiBase)** ঘরে বসিয়ে দিন।"
+          } >> "$GITHUB_STEP_SUMMARY"
