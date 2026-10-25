@@ -448,6 +448,25 @@ class WorkflowFileTest(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
         self.assertNotIn("cache: npm", text)
 
+    def test_openhands_is_tested_live_once_a_day(self):
+        """OPENHANDS_API_KEY আসলেই কাজ করে কি না — workflow নিজেই দিনে একবার যাচাই করবে।"""
+        text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
+        self.assertIn("OpenHands live check", text)
+        self.assertIn("--openhands", text)
+        self.assertIn(".mesh-openhands-ok", text)
+        self.assertIn("openhands.txt", text)
+
+    def test_hermes_gets_enough_turns_and_free_models(self):
+        """--max-turns 3-এ Hermes উত্তর দেওয়ার আগেই থেমে যেত।"""
+        data = (ROOT / "config" / "agents.json").read_text(encoding="utf-8")
+        import json as _json
+
+        hermes = [a for a in _json.loads(data)["agents"] if a["name"] == "hermes"][0]
+        for cmd in [hermes["command"], *hermes["fallback_commands"]]:
+            turns = int(cmd[cmd.index("--max-turns") + 1])
+            self.assertGreaterEqual(turns, 6)
+            self.assertIn("openrouter", " ".join(cmd))
+
     def test_only_trusted_people_can_trigger_from_issue_comment(self):
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
         self.assertIn("author_association", text)
@@ -625,6 +644,22 @@ class CleanReplyTest(unittest.TestCase):
         from mesh.textutil import clean_reply
 
         self.assertEqual(clean_reply("⚠ tirith security scanner enabled but not available"), "")
+
+    def test_unclosed_reasoning_box_still_gives_an_answer(self):
+        """বক্স বন্ধ না হলে আগে পুরো উত্তর হারিয়ে যেত — এখন কাঁচা লেখা ফেরত আসে।"""
+        from mesh.textutil import clean_reply
+
+        raw = (
+            "⚠ tirith security scanner enabled but not available\n"
+            "┌─ Reasoning ───────────┐\n"
+            "আমি ঠিক আছি, কাজ করছি।\n"
+        )
+        self.assertEqual(clean_reply(raw), "┌─ Reasoning ───────────┐\nআমি ঠিক আছি, কাজ করছি।")
+
+    def test_empty_output_only_when_truly_empty(self):
+        from mesh.textutil import clean_reply
+
+        self.assertEqual(clean_reply("   \n\n"), "")
 
     def test_adapter_uses_clean_reply(self):
         spec = AgentSpec(name="hermes", command=["hermes", "chat", "-q", "{message}"])

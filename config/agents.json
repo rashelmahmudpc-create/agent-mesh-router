@@ -175,7 +175,7 @@
         "-Q",
         "--yolo",
         "--max-turns",
-        "3"
+        "6"
       ],
       "timeout_sec": 600,
       "keys": [
@@ -189,7 +189,7 @@
         "মনে",
         "পরিকল্পনা"
       ],
-      "notes": "শুধু OpenRouter + শুধু ফ্রি মডেল (FREE_M1/M2)। পেইড মডেল দিলে 402 'never purchased credits' আসে",
+      "notes": "শুধু OpenRouter + শুধু ফ্রি মডেল (FREE_M1/M2)। পেইড মডেল দিলে 402 'never purchased credits' আসে। --max-turns 6: ৩-এ কম পড়ে উত্তর ছাড়াই শেষ হয়ে যেত।",
       "fallback_commands": [
         [
           "hermes",
@@ -203,7 +203,7 @@
           "-Q",
           "--yolo",
           "--max-turns",
-          "3"
+          "6"
         ],
         [
           "hermes",
@@ -217,7 +217,7 @@
           "-Q",
           "--yolo",
           "--max-turns",
-          "3"
+          "6"
         ]
       ],
       "priority": 3
