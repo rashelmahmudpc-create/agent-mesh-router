@@ -22,8 +22,8 @@
 const API = "https://api.github.com";
 const MAX_TEXT = 4000;
 // ⏱️ উত্তর কতক্ষণ অপেক্ষা করবে। Actions রান বাস্তবে ৩–৯ মিনিট নেয় (মাপা:
-// 217s, 356s, 570s), তাই ডিফল্ট ৫ মিনিট। env.MAX_WAIT_MS দিয়ে বদলানো যায়।
-const DEFAULT_MAX_WAIT_MS = 300000;
+// 217s, 356s, 570s), তাই ডিফল্ট ১০ মিনিট। env.MAX_WAIT_MS দিয়ে বদলানো যায়।
+const DEFAULT_MAX_WAIT_MS = 600000;
 
 const cors = (env) => ({
   "access-control-allow-origin": env.ALLOWED_ORIGIN || "*",
