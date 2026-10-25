@@ -91,10 +91,12 @@ python3 -m mesh.cli "হাই" --mode group
 | এজেন্ট | ধরন | মাথা | key লাগে? |
 |---|---|---|---|
 | 🧑‍💻 **OpenCode** | CLI | DeepSeek V4.1 Flash (ফ্রি) · লিমিট শেষ হলে OpenRouter fallback | ❌ |
-| 🟦 **Cline** | CLI | OpenRouter (`-P openrouter`) | ✅ OpenRouter |
-| 🟠 **Claude Code** | CLI | OpenRouter দিয়ে যেকোনো মডেল | ✅ OpenRouter |
-| ☤ **Hermes** | CLI | OpenRouter / নিজের পছন্দের মডেল | ✅ OpenRouter |
-| 🖐️ **OpenHands** | GitHub Issue | ওদের ক্লাউডে ফ্রি | ❌ |
+| 🟠 **Claude Code** | CLI | OpenRouter `:free` মডেল (fallback ২টা) | ✅ OpenRouter |
+| ☤ **Hermes** | CLI | `hermes-agent` (pip) · `openrouter/free` | ✅ OpenRouter |
+| 🟦 **Cline** | ⏸️ বন্ধ | ফ্রি টিয়ারে টোকেন বাজেট অনেক বড় চায় | — |
+| 🖐️ **OpenHands** | ⏸️ বন্ধ | ওদের GitHub App বসালে চালু — [`docs/openhands-setup-bn.md`](docs/openhands-setup-bn.md) | ❌ |
+
+📊 সব কাজের অবস্থা এক পাতায়: **[`docs/status-bn.md`](docs/status-bn.md)**
 
 **সিদ্ধান্ত:** 🧠 ম্যানেজার = **আমাদের কোড** (কোনো AI কল নেই, ০ খরচ, ভুল করে না)।
 Hermes ও বাকিরা = **কর্মী**। বিস্তারিত: [`docs/design-bn.md`](docs/design-bn.md)

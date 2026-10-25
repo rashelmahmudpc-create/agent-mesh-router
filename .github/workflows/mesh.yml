@@ -73,12 +73,18 @@ jobs:
       - name: Install agent CLIs
         continue-on-error: true
         run: |
-          npm install -g @opencode/cli || true   # বাইনারি: opencode (key ছাড়াই ফ্রি মডেল)
-          npm install -g cline || true           # বাইনারি: cline
-          npm install -g @anthropic-ai/claude-code || true  # বাইনারি: claude
-          # ☤ Hermes: অফিশিয়াল ডক (hermes-agent.nousresearch.com/docs) থেকে
-          # ইনস্টল কমান্ড দেখে নিচে বসান, তারপর কমেন্ট খুলুন:
-          # curl -fsSL <official-install-url> | sh || true
+          npm install -g @opencode/cli || true              # opencode
+          npm install -g @anthropic-ai/claude-code || true  # claude
+          # ☤ Hermes — PyPI প্যাকেজ (যাচাই করা: hermes-agent 0.19.0)
+          python -m pip install --user --quiet hermes-agent || true
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify CLIs
+        continue-on-error: true
+        run: |
+          for b in opencode claude hermes; do
+            if command -v "$b" >/dev/null; then echo "✅ $b → $(command -v $b)"; else echo "❌ $b নেই"; fi
+          done
 
       - name: Guard (key ছাড়া অটো-রান হবে না)
         id: guard
@@ -126,6 +132,7 @@ jobs:
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           OPENCODE_MODEL: ${{ vars.OPENCODE_MODEL }}
+          HERMES_MODEL: ${{ vars.HERMES_MODEL }}
         run: |
           python -m mesh.cli --doctor > doctor.txt 2>&1 || true
           {
@@ -151,6 +158,7 @@ jobs:
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           OPENCODE_MODEL: ${{ vars.OPENCODE_MODEL }}
+          HERMES_MODEL: ${{ vars.HERMES_MODEL }}
           MSG: ${{ inputs.message || github.event.comment.body || 'সবাই, এক লাইনে নিজের অবস্থা জানাও' }}
           MODE: ${{ inputs.mode || 'group' }}
           ISSUE: ${{ github.event.issue.number || '' }}

@@ -476,13 +476,14 @@ class CommandEnvTest(unittest.TestCase):
         custom = CliAdapter(spec, dry_run=True, environ={"OPENCODE_MODEL": "my/model"})
         self.assertIn("my/model", custom._cmd("হাই"))
 
-    def test_unverified_agents_are_off_by_default(self):
+    def test_only_verified_agents_are_on(self):
         config = MeshConfig.load()
         active = [a.name for a in config.enabled()]
-        # যাচাই হয়নি এমন এজেন্ট ডিফল্টে বন্ধ থাকবে
-        for name in ("hermes", "openhands"):
-            self.assertNotIn(name, active)
-        self.assertIn("claude", active)
+        # যাচাই করা এজেন্ট চালু
+        for name in ("opencode", "claude", "hermes"):
+            self.assertIn(name, active)
+        # যাচাই হয়নি (OpenHands org/mention) — বন্ধ
+        self.assertNotIn("openhands", active)
 
 
 class DoctorHonestyTest(unittest.TestCase):
@@ -490,12 +491,16 @@ class DoctorHonestyTest(unittest.TestCase):
         from mesh.doctor import run_doctor
 
         checks = run_doctor(
-            MeshConfig.load(), environ={"GH_TOKEN": "x"}, which=lambda n: "/bin/" + n,
+            MeshConfig.load(),
+            environ={"GH_TOKEN": "x", "OPENROUTER_API_KEY": "sk-or-test"},
+            which=lambda n: "/bin/" + n,
             store_path=Path(tempfile.mkdtemp()) / "t.jsonl",
         )
-        # শুধু key না থাকায় ব্যর্থ; বন্ধ এজেন্টগুলো শুধু সতর্কতা
+        # key দেওয়া আছে → কোনো ব্যর্থতা নেই; বন্ধ এজেন্ট শুধু সতর্কতা
         fails = [c.item for c in checks if c.status == "fail"]
-        self.assertEqual(fails, ["claude keys"])
+        self.assertEqual(fails, [])
+        by_item = {c.item: c for c in checks}
+        self.assertEqual(by_item["🖐️ OpenHands"].status, "warn")
 
 
 class AnsiAndFallbackTest(unittest.TestCase):
