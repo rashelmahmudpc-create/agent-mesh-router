@@ -12,6 +12,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+ROOT = Path(__file__).resolve().parent.parent
+
 from mesh.adapters import CliAdapter  # noqa: E402
 from mesh.chat import Store  # noqa: E402
 from mesh.config import AgentSpec, MeshConfig  # noqa: E402
@@ -399,3 +401,41 @@ class FreeModelTest(unittest.TestCase):
         CliAdapter(spec, runner=runner, environ={}).send("হাই")
         self.assertEqual(attempts[0].get("ANTHROPIC_API_KEY"), "")  # literal "" থাকবে
         self.assertNotIn("ANTHROPIC_AUTH_TOKEN", attempts[0])      # নেই → সেট হবে না
+
+
+class ExitCodeTest(unittest.TestCase):
+    """CI তে লাল ✅ এড়াতে ডিফল্টে exit 0; --strict দিলে 1."""
+
+    def test_group_dry_run_is_green(self):
+        from mesh import cli
+
+        code = cli.main(["হাই", "--mode", "group", "--dry-run"])
+        self.assertEqual(code, 0)
+
+    def test_doctor_is_green_by_default_and_strict_fails(self):
+        from mesh import cli
+
+        self.assertEqual(cli.main(["--doctor"]), 0)
+        env_ok = {"PATH": "/usr/bin"}
+        from mesh.doctor import run_doctor, print_checks
+
+        checks = run_doctor(
+            MeshConfig.load(), environ=env_ok, which=lambda n: None,
+            store_path=Path(tempfile.mkdtemp()) / "t.jsonl",
+        )
+        self.assertEqual(print_checks(checks), 0)
+        self.assertEqual(print_checks(checks, strict=True), 1)
+
+
+class WorkflowFileTest(unittest.TestCase):
+    def test_workflow_has_summary_and_status_issue(self):
+        text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
+        self.assertIn("GITHUB_STEP_SUMMARY", text)
+        self.assertIn("mesh-status", text)
+        self.assertIn("doctor.txt", text)
+        # set -e এর সাথে [ ... ] && ... থাকলে জব মরে যায় — আর রাখা যাবে না
+        self.assertNotIn("set -euo pipefail", text)
+
+    def test_workflow_does_not_require_package_json(self):
+        text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
+        self.assertNotIn("cache: npm", text)
