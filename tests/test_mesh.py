@@ -439,3 +439,8 @@ class WorkflowFileTest(unittest.TestCase):
     def test_workflow_does_not_require_package_json(self):
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
         self.assertNotIn("cache: npm", text)
+
+    def test_only_trusted_people_can_trigger_from_issue_comment(self):
+        text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
+        self.assertIn("author_association", text)
+        self.assertIn("OWNER", text)
