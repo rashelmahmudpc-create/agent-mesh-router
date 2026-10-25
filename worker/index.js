@@ -236,7 +236,7 @@ const PERSONAS = [
   },
   {
     id: "claude", emoji: "🟠", name: "Claude Code", role: "আর্কিটেকচার",
-    chain: ["openrouter", "gemini", "groq"],
+    chain: ["openrouter", "groq", "gemini"],
     style: "তুমি Claude Code — আর্কিটেকচার ও পর্যালোচনার এজেন্ট। দুইটা বিকল্প দিয়ে দ্বিধা ভাঙো।",
   },
   {
@@ -246,7 +246,7 @@ const PERSONAS = [
   },
   {
     id: "openhands", emoji: "🖐️", name: "OpenHands", role: "বড় কাজ",
-    chain: ["gemini", "openrouter", "groq"],
+    chain: ["groq", "openrouter", "gemini"],
     style: "তুমি OpenHands — বড় কাজের এজেন্ট। কাজটা ছোট ধাপে ভাগ করে প্রথম ধাপটা বলো।",
   },
 ];
@@ -303,7 +303,7 @@ const PROVIDERS = {
     model: (env) => env.FAST_MODEL_GEMINI || "gemini-2.5-flash",
     models: (env) => (env.FAST_MODEL_GEMINI
       ? [env.FAST_MODEL_GEMINI]
-      : ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]),
+      : ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"]),
     headers: (key) => ({ "content-type": "application/json", "x-goog-api-key": key }),
     body: (env, model, system, user, history = []) => ({
       systemInstruction: { parts: [{ text: system }] },
@@ -359,7 +359,10 @@ function cleanAnswer(text) {
     const cleaned = last.split("\n").filter((l) => !META_PREFIX.test(l.trim())).join("\n").trim();
     kept = cleaned || String(text || "").trim();
   }
-  return kept.slice(0, 1600);
+  return kept
+    .replace(/^\s*(?:সারমর্ম|সংক্ষেপে|উত্তর)\s*[:：]\s*/i, "")
+    .trim()
+    .slice(0, 1600);
 }
 
 /** 🤖 কোন এজেন্ট উত্তর দেবে — agent মোডে একজনই */
