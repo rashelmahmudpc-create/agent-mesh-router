@@ -82,7 +82,7 @@
         "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
         "ANTHROPIC_AUTH_TOKEN": "$OPENROUTER_API_KEY",
         "ANTHROPIC_API_KEY": "",
-        "ANTHROPIC_MODEL": "$CLAUDE_MODEL"
+        "ANTHROPIC_MODEL": "$CLAUDE_MODEL:-openrouter/free"
       },
       "keys": [
         "OPENROUTER_API_KEY"
@@ -94,7 +94,7 @@
         "গুরুত্বপূর্ণ",
         "আর্কিটেকচার"
       ],
-      "notes": "যাচাই করা: v2.1.310, `-p` ঠিক আছে। OpenRouter দিয়ে চালাতে ANTHROPIC_BASE_URL + AUTH_TOKEN + খালি API_KEY; মডেল বদলাতে CLAUDE_MODEL সেট করুন"
+      "notes": "যাচাই করা: v2.1.310, `-p` ঠিক আছে। টাকা নেই? $0 চলবে — OpenRouter এর :free মডেল (ডিফল্ট openrouter/free), key ছাড়া কার্ড লাগে না"
     },
     {
       "name": "hermes",
@@ -123,7 +123,8 @@
         "launch",
         "মনে",
         "পরিকল্পনা"
-      ]
+      ],
+      "notes": "OpenRouter :free মডেলেও চলে; মডেলে ৬৪K context + tool calling লাগে"
     },
     {
       "name": "openhands",

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .chat import default_store
 from .config import MeshConfig
-from .keys import collect_keys
+from .keys import collect_keys, expand_env_value
 
 OK, WARN, FAIL = "ok", "warn", "fail"
 ICON = {OK: "✅", WARN: "⚠️", FAIL: "❌"}
@@ -84,6 +84,13 @@ def run_doctor(
                 checks.append(Check(spec.display(), WARN, "নেই: " + ", ".join(missing)))
         else:
             checks.append(Check(spec.display(), WARN, f"অজানা ধরন: {spec.kind}"))
+
+        # কোন মডেল দিয়ে চলবে? (ফ্রি হলে সেটাও বলা হয়)
+        for env_name, raw in spec.env.items():
+            if env_name.endswith("MODEL"):
+                resolved = expand_env_value(raw, env)
+                free = "ফ্রি" if ("free" in resolved.lower() or resolved.startswith("openrouter/")) else "পেইড হতে পারে"
+                checks.append(Check(f"{spec.name} model", OK, f"{resolved or 'সেট করা হয়নি'} ({free})"))
 
         # key যাচাই
         if spec.keys:

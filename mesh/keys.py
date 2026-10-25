@@ -30,9 +30,17 @@ def collect_keys(names: list[str], environ: dict[str, str] | None = None) -> lis
 
 
 def expand_env_value(value: str, environ: dict[str, str] | None = None) -> str:
-    """'$OPENROUTER_API_KEY' → আসল key। না থাকলে খালি স্ট্রিং।"""
+    """'$OPENROUTER_API_KEY' → আসল key। না থাকলে খালি স্ট্রিং।
+
+    ডিফল্টও দেওয়া যায়: '$CLAUDE_MODEL:-openrouter/free'
+    (শেলের মতোই — ভেরিয়েবল নেই বা খালি হলে ডিফল্টটা ব্যবহার হয়)
+    """
     env = environ if environ is not None else os.environ
     value = value or ""
-    if value.startswith("$"):
-        return (env.get(value[1:]) or "").strip()
-    return value
+    if not value.startswith("$"):
+        return value
+
+    expr = value[1:]
+    name, _, default = expr.partition(":-")
+    resolved = (env.get(name) or "").strip()
+    return resolved or default

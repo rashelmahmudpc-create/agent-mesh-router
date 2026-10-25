@@ -94,14 +94,31 @@ Hermes ও বাকিরা = **কর্মী**। বিস্তারি�
 
 ---
 
+## 💸 টাকা নেই? — সমস্যা নেই
+
+| এজেন্ট | খরচ | কী লাগে |
+|---|---|---|
+| 🧑‍💻 OpenCode | **০** | কিছুই না — key ছাড়াই ফ্রি মডেল দিয়ে চলে ✅ |
+| 🟦 Cline | **০** | নিজের ফ্রি মডেল |
+| 🖐️ OpenHands | **০** | ওদের ক্লাউডে ফ্রি |
+| 🟠 Claude Code | **০** | OpenRouter এর `:free` মডেল (কার্ড লাগে না) |
+| ☤ Hermes | **০** | OpenRouter এর `:free` মডেল |
+
+**ডিফল্ট মডেল = `openrouter/free`** (OpenRouter এর অটো-রাউটার — নিজেই একটা ফ্রি মডেল বেছে নেয়)।
+`CLAUDE_MODEL` না দিলেও এটাই ব্যবহার হবে।
+
+👉 বিস্তারিত: **[`docs/free-models-bn.md`](docs/free-models-bn.md)**
+
 ## 🔑 GitHub Secrets এ যা বসাতে হবে
 
 ```
-OPENROUTER_API_KEY      # Claude Code + Hermes
+OPENROUTER_API_KEY      # Claude Code + Hermes — কার্ড লাগে না (openrouter.ai/keys)
 OPENROUTER_API_KEY_2    # (ঐচ্ছিক) ব্যাকআপ
 GEMINI_API_KEY          # (ঐচ্ছিক) ভবিষ্যতের ছোট রাউটারের জন্য
 XAI_API_KEY             # (ঐচ্ছিক) রিভিউয়ার / দ্বিতীয় মত
 ```
+
+📋 Variable (ঐচ্ছিক): `CLAUDE_MODEL` = `openrouter/free` বা যেকোনো `:free` মডেল আইডি।
 
 > 🚫 `GITHUB_TOKEN` এমনিতেই থাকে — `gh` দিয়ে Issue/comment করার জন্য।
 

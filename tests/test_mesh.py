@@ -347,3 +347,55 @@ class GhEnvTest(unittest.TestCase):
         self.assertTrue(seen)
         for env in seen:
             self.assertIn("PATH", env, "gh চালানোর জন্য PATH দরকার")
+
+
+class FreeModelTest(unittest.TestCase):
+    def test_default_model_expansion(self):
+        from mesh.keys import expand_env_value
+
+        self.assertEqual(expand_env_value("$CLAUDE_MODEL:-openrouter/free", {}), "openrouter/free")
+        self.assertEqual(
+            expand_env_value("$CLAUDE_MODEL:-openrouter/free", {"CLAUDE_MODEL": "z-ai/glm-5.2:free"}),
+            "z-ai/glm-5.2:free",
+        )
+        # খালি ভেরিয়েবল মানে ডিফল্টই ব্যবহার হবে
+        self.assertEqual(expand_env_value("$CLAUDE_MODEL:-openrouter/free", {"CLAUDE_MODEL": ""}), "openrouter/free")
+        # ডিফল্ট ছাড়া পুরনো আচরণ অপরিবর্তিত
+        self.assertEqual(expand_env_value("$OPENROUTER_API_KEY", {}), "")
+
+    def test_claude_works_without_money(self):
+        """কোনো CLAUDE_MODEL সেট না করলেও claude ফ্রি মডেলে চলে।"""
+        agent = MeshConfig.load().get("claude")
+        from mesh.keys import expand_env_value
+
+        resolved = expand_env_value(agent.env["ANTHROPIC_MODEL"], {})
+        self.assertIn("free", resolved.lower())
+
+    def test_doctor_reports_model(self):
+        from mesh.doctor import run_doctor
+
+        checks = {
+            c.item: c
+            for c in run_doctor(
+                MeshConfig.load(), environ={}, which=lambda n: None,
+                store_path=Path(tempfile.mkdtemp()) / "t.jsonl",
+            )
+        }
+        self.assertIn("claude model", checks)
+        self.assertIn("ফ্রি", checks["claude model"].detail)
+
+    def test_base_env_keeps_empty_literal_but_skips_missing_var(self):
+        attempts = []
+
+        def runner(cmd, env, cwd, timeout):
+            attempts.append(dict(env))
+            return 0, "ok", ""
+
+        spec = AgentSpec(
+            name="claude",
+            command=["claude", "-p", "{message}"],
+            env={"ANTHROPIC_API_KEY": "", "ANTHROPIC_AUTH_TOKEN": "$NOPE_MISSING"},
+        )
+        CliAdapter(spec, runner=runner, environ={}).send("হাই")
+        self.assertEqual(attempts[0].get("ANTHROPIC_API_KEY"), "")  # literal "" থাকবে
+        self.assertNotIn("ANTHROPIC_AUTH_TOKEN", attempts[0])      # নেই → সেট হবে না
