@@ -1,12 +1,19 @@
 name: worker
 
-# ☁️ Cloudflare Worker নিজে থেকে ডিপ্লয় হবে (কোড পেস্ট করার ঝামেলা নেই)
+# ☁️ Cloudflare Worker — সম্পূর্ণ অটো ডিপ্লয়
 #
 # দরকার শুধু ২টা secret (Settings → Secrets and variables → Actions):
 #   CF_API_TOKEN   → Cloudflare → My Profile → API Tokens → Create Token
 #                    ("Edit Cloudflare Workers" টেমপ্লেট)
 #   CF_ACCOUNT_ID  → Cloudflare ড্যাশবোর্ডের ডান পাশে Account ID
-# না থাকলে এই workflow চুপচাপ বাদ যাবে (কিছু ভাঙবে না)।
+#
+# এগুলো থাকলে এই workflow নিজেই —
+#   ১) Worker টেস্ট চালায়
+#   ২) deploy করে
+#   ৩) OPENROUTER / GROQ / GEMINI key গুলো Worker-এর secret হিসেবে বসিয়ে দেয়
+#   ৪) ঠিকানা বের করে docs/app/server.json-এ লিখে কমিট করে (অ্যাপ নিজেই ঠিকানা নিয়ে নেবে)
+#   ৫) /api/health দিয়ে যাচাই করে
+# secret না থাকলে চুপচাপ বাদ যায় (কিছু ভাঙে না)।
 
 on:
   push:
@@ -17,7 +24,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # docs/app/server.json কমিট করার জন্য
 
 concurrency:
   group: worker-deploy
@@ -26,9 +33,11 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
       - name: Cloudflare secret আছে কি?
         id: gate
@@ -38,9 +47,10 @@ jobs:
         run: |
           if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "⏭️ CF_API_TOKEN / CF_ACCOUNT_ID নেই — ডিপ্লয় বাদ (ড্যাশবোর্ড থেকে কোড পেস্ট করলেও চলবে)"
+            echo "⏭️ CF_API_TOKEN / CF_ACCOUNT_ID নেই — ডিপ্লয় বাদ"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "✅ Cloudflare secret পাওয়া গেছে — ডিপ্লয় শুরু"
           fi
 
       - uses: actions/setup-node@v4
@@ -61,13 +71,97 @@ jobs:
           workingDirectory: worker
           command: deploy
 
-      - name: লেখো (কোথায় গেল)
+      - name: Worker-এ key গুলো বসাও (secret)
+        if: steps.gate.outputs.skip != 'true'
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_API_KEY_2: ${{ secrets.OPENROUTER_API_KEY_2 }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          MESH_GH_PAT: ${{ secrets.MESH_GH_PAT }}
+          APP_TOKEN: ${{ secrets.APP_TOKEN }}
+        run: |
+          set -uo pipefail
+          put() { # নাম, মান
+            if [ -z "${2:-}" ]; then echo "⏭️ $1 নেই — বাদ"; return 0; fi
+            # worker/ ফোল্ডারের wrangler.toml-এ নাম (mesh-chat) আছে — তাই --name লাগে না
+            if printf '%s' "$2" | npx --yes wrangler@4 secret put "$1" >/dev/null 2>&1; then
+              echo "✅ $1 বসানো হলো"
+            else
+              echo "❌ $1 বসাতে পারলাম না"
+            fi
+          }
+          put OPENROUTER_API_KEY "$OPENROUTER_API_KEY"
+          put OPENROUTER_API_KEY_2 "$OPENROUTER_API_KEY_2"
+          put GROQ_API_KEY "$GROQ_API_KEY"
+          put GEMINI_API_KEY "$GEMINI_API_KEY"
+          # 🐙 GitHub token (ঐচ্ছিক) — থাকলে উত্তর Issue #3-এও ফিরবে
+          put GITHUB_TOKEN "$MESH_GH_PAT"
+          # 🔑 অ্যাপের পাসকোড (ঐচ্ছিক)
+          put APP_TOKEN "$APP_TOKEN"
+
+      - name: ঠিকানা বের করো + যাচাই করো
+        if: steps.gate.outputs.skip != 'true'
+        id: url
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          set -uo pipefail
+          SUB=$(curl -s -H "Authorization: Bearer $CF_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/subdomain" \
+            | python3 -c "import json,sys; print((json.load(sys.stdin).get('result') or {}).get('subdomain',''))" 2>/dev/null || true)
+          if [ -z "$SUB" ]; then
+            echo "⚠️ workers.dev subdomain পাওয়া গেল না"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          URL="https://mesh-chat.$SUB.workers.dev"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "🔗 ঠিকানা: $URL"
+          sleep 5
+          for i in 1 2 3 4 5; do
+            BODY=$(curl -s -m 20 "$URL/api/health" || true)
+            if printf '%s' "$BODY" | grep -q '"ok":true'; then
+              echo "found=true" >> "$GITHUB_OUTPUT"
+              echo "✅ হেলথ ঠিক: $BODY"
+              printf '%s' "$BODY" | grep -q '"fast":true' && echo "✅ দ্রুত লেন চালু (fast=true)"
+              break
+            fi
+            echo "… অপেক্ষা ($i/5)"
+            sleep 6
+          done
+
+      - name: অ্যাপকে ঠিকানা জানাও (server.json)
+        if: steps.gate.outputs.skip != 'true' && steps.url.outputs.found == 'true'
+        env:
+          URL: ${{ steps.url.outputs.url }}
+        run: |
+          set -uo pipefail
+          mkdir -p docs/app
+          printf '{\n  "apiBase": "%s",\n  "note": "worker.yml নিজেই লিখেছে — অ্যাপ এখান থেকেই সার্ভারের ঠিকানা নেয়"\n}\n' "$URL" > docs/app/server.json
+          cat docs/app/server.json
+          git config user.name "mesh-bot"
+          git config user.email "mesh-bot@users.noreply.github.com"
+          git add docs/app/server.json
+          if git diff --cached --quiet; then echo "কিছু বদলায়নি"; exit 0; fi
+          git commit -m "chore(worker): অ্যাপের সার্ভার ঠিকানা $URL"
+          git push || true
+
+      - name: সারসংক্ষেপ
         if: steps.gate.outputs.skip != 'true'
         run: |
           {
-            echo "## ☁️ Worker ডিপ্লয় হয়েছে"
+            echo "## ☁️ Cloudflare Worker"
             echo ""
-            echo "ঠিকানা: \`https://mesh-chat.<আপনার-সাবডোমেইন>.workers.dev\`"
-            echo ""
-            echo "ওই ঠিকানাটা অ্যাপের **Settings → Server (apiBase)** ঘরে বসিয়ে দিন।"
+            if [ -n "${{ steps.url.outputs.url }}" ]; then
+              echo "- 🔗 ঠিকানা: \`${{ steps.url.outputs.url }}\`"
+              echo "- ✅ অ্যাপে আলাদা করে কিছু বসাতে হবে না — \`docs/app/server.json\` থেকেই নিয়ে নেবে"
+            else
+              echo "- ⚠️ ডিপ্লয় হয়েছে, কিন্তু workers.dev ঠিকানা পাওয়া যায়নি (Cloudflare ড্যাশবোর্ড → Workers দেখুন)"
+            fi
+            echo "- ⚡ গতি: ৩–৮ সেকেন্ড (Actions-এর ৮–১০ মিনিটের বদলে)"
           } >> "$GITHUB_STEP_SUMMARY"

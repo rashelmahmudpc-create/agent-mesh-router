@@ -454,6 +454,21 @@ const cfg=Object.assign({theme:'dark',accent:'#d97757',fs:17,name:'',server:'',t
 const S={chats:lsGet('ax.chats',[]),cur:null,busy:false,ac:null,atts:[],agents:DEMO_AGENTS,conn:'demo',stick:true,dict:null};
 const ELS=new WeakMap();
 const saveCfg=()=>lsSet('ax.cfg',cfg);
+// ☁️ সার্ভারের ঠিকানা নিজে থেকে নাও — deploy workflow `docs/app/server.json` লিখে দেয়,
+// তাই কিছু হাতে বসাতে হয় না (নিজে কিছু বসানো থাকলে সেটাই প্রাধান্য পাবে)
+(async()=>{
+  try{
+    if(cfg.server||cfg.ghToken||cfg.fastKey)return;      // ব্যবহারকারীর নিজের সেটিং থাকলে ছুঁব না
+    const r=await fetch('server.json',{cache:'no-store'});
+    if(!r.ok)return;
+    const j=await r.json();
+    const url=String(j&&j.apiBase||'').trim();
+    if(!url)return;
+    cfg.server=url;cfg.demo=false;saveCfg();
+    const box=$('#sServer');if(box)box.value=url;
+    try{ping()}catch{}
+  }catch{}
+})();
 const saveChats=()=>lsSet('ax.chats',S.chats.slice(0,60));
 // ফাঁকা সার্ভার + GitHub টোকেন থাকলে = "GitHub সরাসরি" মোড (Worker ছাড়া)
 const isGh=()=>!cfg.server.trim()&&!!String(cfg.ghToken||'').trim();
