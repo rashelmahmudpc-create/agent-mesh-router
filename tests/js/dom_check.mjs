@@ -122,6 +122,57 @@ check("গ্রুপে একাধিক এজেন্টের বাব�
 
 check("কোনো JS এরর নেই", errors.length === 0, errors.slice(0, 2).join(" | "));
 
+/* ---- ⚡ দ্রুত মোড (ব্রাউজার → AI API, কোনো সার্ভার নয়) ---- */
+{
+  const fastCalls = [];
+  const sseOk = (chunks) =>
+    new Response(
+      new ReadableStream({
+        start(c) {
+          const enc = new TextEncoder();
+          for (const text of chunks) {
+            c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`));
+          }
+          c.enqueue(enc.encode("data: [DONE]\n\n"));
+          c.close();
+        },
+      }),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    );
+  const fastErrors = [];
+  const fastDom = new JSDOM(html, {
+    url: "http://localhost/docs/app/index.html",
+    pretendToBeVisual: true,
+    runScripts: "dangerously",
+    beforeParse(w) {
+      w.fetch = async (url, init = {}) => {
+        fastCalls.push({ url: String(url), method: init.method || "GET" });
+        return sseOk(["## ⚡ দ্রুত উত্তর\n", "এটা ", "কয়েক সেকেন্ডেই ", "এসে গেছে ✅"]);
+      };
+      w.localStorage.setItem("ax.cfg", JSON.stringify({
+        demo: false, fastMode: true, fastProvider: "groq", fastKey: "gsk_test", fastModel: "",
+        server: "", token: "", ghToken: "", ghRepo: "owner/repo", ghIssue: "3",
+        theme: "dark", accent: "#d97757", fs: 17, lang: "bn-BD", speak: false, mode: "agent", name: "",
+      }));
+    },
+  });
+  fastDom.window.addEventListener("error", (e) => fastErrors.push(String(e.message || e.error)));
+  const fd = fastDom.window.document;
+  const fq = (s) => fd.querySelector(s);
+  check("দ্রুত মোডে চিপ দেখায়", await until(() => (fq("#feed .conn-chip")?.textContent || "").includes("দ্রুত"), 5000),
+    fq("#feed .conn-chip")?.textContent);
+  fq("#inp").value = "কেমন আছো?";
+  fq("#inp").dispatchEvent(new fastDom.window.Event("input", { bubbles: true }));
+  const t0 = Date.now();
+  fq("#btnMain").click();
+  const fastOk = await until(() => (fq(".msg.ai .md")?.textContent || "").includes("এসে গেছে"), 3000);
+  check("২ সেকেন্ডেই উত্তর এসেছে", fastOk, `${Date.now() - t0}ms`);
+  check("AI API-তেই গেছে (GitHub নয়)", fastCalls.every((c) => c.url.includes("api.groq.com") || c.url.includes("/chat/completions")),
+    fastCalls.map((c) => c.url).join(" , ").slice(0, 60));
+  check("দ্রুত মোডে JS এরর নেই", fastErrors.length === 0, fastErrors.slice(0, 2).join(" | "));
+  fastDom.window.close();
+}
+
 /* ---- GitHub সরাসরি মোড (Worker ছাড়া) ---- */
 // আলাদা JSDOM: localStorage-এ টোকেন বসানো, GitHub API নকল করা (fetch mock)
 {
