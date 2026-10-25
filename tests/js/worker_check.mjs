@@ -225,6 +225,23 @@ check("⚡ comment-এ key ফাঁস হয়নি", !/or-test|gq-test|gm-t
 }
 
 {
+  // 🎯 অ্যাপের drop-down: যাদের বাছা হয়েছে শুধু তারাই
+  llmContent = "";
+  const { evs } = await fastChat({ mode: "group", message: "কে কে আছো?", agents: ["hermes"] });
+  const speakers = new Set(evs.filter((e) => e.type === "agent_message" && e.agent).map((e) => e.agent.name));
+  check("🎯 drop-down: বাছা একজনই উত্তর দেয়", speakers.size === 1 && speakers.has("Hermes"), [...speakers].join(","));
+
+  const two = await fastChat({ mode: "group", message: "কে কে আছো?", agents: ["hermes", "claude"] });
+  const twoSpeakers = new Set(two.evs.filter((e) => e.type === "agent_message" && e.agent).map((e) => e.agent.name));
+  check("🎯 drop-down: দুইজন বাছলে দুইজনই", twoSpeakers.size === 2 && twoSpeakers.has("Hermes") && twoSpeakers.has("Claude Code"),
+    [...twoSpeakers].join(","));
+
+  const none = await fastChat({ mode: "group", message: "কে কে আছো?" });
+  const allSpeakers = new Set(none.evs.filter((e) => e.type === "agent_message" && e.agent).map((e) => e.agent.name));
+  check("🎯 drop-down: না বাছলে সবাই (৪ জন)", allSpeakers.size === 4, [...allSpeakers].join(","));
+}
+
+{
   // 🧹 মডেলের ভেতরের "Analyze the Request / Attempt" বাদ যায়
   llmContent = [
     "1. Analyze the Request:",
@@ -267,6 +284,32 @@ check("⚡ comment-এ key ফাঁস হয়নি", !/or-test|gq-test|gm-t
   );
   await eventsOf(response);
   check("FAST=off → Actions পথ", calls.length > before && llmCalls.length > 0);
+  globalThis.fetch = oldFetch;
+}
+
+{
+  // 🎯 ধীর (Actions) লেনেও বাছা তালিকা + মোড comment-এর মার্কারে যায়
+  const oldFetch = globalThis.fetch;
+  globalThis.fetch = realFetch;
+  const slowEnv = { ...env, FAST: "off", OPENROUTER_API_KEY: "x" };
+  const posted = [];
+  const realSlowFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).endsWith("/comments") && init.method === "POST") posted.push(JSON.parse(init.body).body);
+    return realSlowFetch(url, init);
+  };
+  const response = await worker.fetch(
+    req("/api/chat", {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ mode: "group", message: "শুধু হার্মিস উত্তর দাও", agents: ["hermes"] }),
+    }),
+    slowEnv,
+  );
+  await eventsOf(response);
+  const body = posted.find((b) => b.startsWith("@mesh")) || "";
+  check("🎯 ধীর লেন: মার্কারে mode:group যায়", body.includes("mode:group"), body.slice(-64));
+  check("🎯 ধীর লেন: মার্কারে targets:hermes যায়", body.includes("targets:hermes"), body.slice(-64));
   globalThis.fetch = oldFetch;
 }
 

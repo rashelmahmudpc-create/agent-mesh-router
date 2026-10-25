@@ -216,6 +216,103 @@ class PromptHygieneTest(unittest.TestCase):
         self.assertEqual(app_mode_of("@mesh হাই\n\n<!-- app:179 mode:group -->"), "group")
         self.assertEqual(app_mode_of("@mesh হাই"), "")  # অ্যাপ নয় → পুরনো আচরণ
 
+    def test_app_targets_marker_is_read(self):
+        """🎯 drop-down: একজনে টিক = শুধু সে, একাধিকে = সবাই।"""
+        from mesh.textutil import app_targets_of
+
+        self.assertEqual(app_targets_of("@mesh হাই\n<!-- app:1 mode:group targets:hermes -->"), ["hermes"])
+        self.assertEqual(
+            app_targets_of("@mesh হাই\n<!-- app:1 mode:group targets:claude,hermes -->"),
+            ["claude", "hermes"],
+        )
+        self.assertEqual(app_targets_of("@mesh হাই\n<!-- app:1 mode:group -->"), [])
+        self.assertEqual(app_targets_of("@mesh হাই"), [])
+
+
+class PickAgentsTest(unittest.TestCase):
+    """🎯 অ্যাপের drop-down — যাদের বাছা হয়েছে শুধু তারাই উত্তর দেবে।"""
+
+    def _body(self, targets: str) -> str:
+        return f"@mesh আজ কী করবো?\n\n<!-- app:1 mode:group {targets} -->"
+
+    def test_only_picked_agent_answers_in_group(self):
+        runner = FakeRunner()
+        router = make_router(runner, quick=True)
+        router.group(self._body("targets:hermes"), only=["hermes"])
+        self.assertEqual(runner.names(), ["hermes"])
+
+    def test_multiple_picked_agents_all_answer(self):
+        runner = FakeRunner()
+        router = make_router(runner, quick=True)
+        router.group(self._body("targets:opencode,claude"), only=["opencode", "claude"])
+        self.assertCountEqual(runner.names(), ["opencode", "claude"])
+
+    def test_picked_agent_cannot_be_dragged_in_by_mention(self):
+        """বাছা হয়নি — তাই অন্য এজেন্ট @mention করলেও সে ডাকা পড়বে না।"""
+
+        def hermes(cmd, env, n):
+            return 0, "আমি হের্মস — @claude তুমি কী বলো?", ""
+
+        runner = FakeRunner({"hermes": hermes})
+        router = make_router(runner, quick=True)
+        router.group(self._body("targets:hermes"), only=["hermes"])
+        self.assertNotIn("claude", runner.names())
+
+    def test_no_targets_means_everyone(self):
+        runner = FakeRunner()
+        router = make_router(runner, quick=True)
+        router.group(self._body(""), only=[])
+        self.assertCountEqual(runner.names(), ["opencode", "cline", "claude", "hermes"])
+
+    def test_direct_respects_only(self):
+        runner = FakeRunner()
+        router = make_router(runner, quick=True)
+        router.direct("এই bug টা ঠিক করো", only=["hermes"])
+        self.assertEqual(runner.names(), ["hermes"])
+
+    def test_direct_only_does_not_fall_back_to_others(self):
+        runner = FakeRunner({"hermes": (1, "", "boom")})
+        router = make_router(runner, quick=True)
+        router.direct("এই bug টা ঠিক করো", only=["hermes"])
+        self.assertEqual(set(runner.names()), {"hermes"})
+
+
+class CliPickTest(unittest.TestCase):
+    """`python -m mesh.cli` — অ্যাপের মার্কার দেখে নিজেই মোড/বাছা ঠিক করে।"""
+
+    def _run(self, body: str, extra=None):
+        from contextlib import redirect_stdout
+        from io import StringIO
+
+        from mesh import cli
+
+        seen = []
+        original = cli.Router
+
+        class Spy(original):  # type: ignore[misc,valid-type]
+            def __init__(self, *a, **kw):
+                super().__init__(*a, **kw)
+                self.runner = FakeRunner()
+                seen.append(self)
+
+        cli.Router = Spy
+        try:
+            with redirect_stdout(StringIO()):
+                cli.main([body, *(extra or [])])
+        finally:
+            cli.Router = original
+        return seen[0]
+
+    def test_marker_picks_mode_and_agents(self):
+        router = self._run("@mesh আজ কী করবো?\n\n<!-- app:1 mode:group targets:hermes -->")
+        self.assertEqual(router.calls, 1)
+        self.assertEqual(router.replies[0].agent, "hermes")
+
+    def test_agents_flag_overrides(self):
+        router = self._run("হাই সবাই", ["--mode", "group", "--agents", "opencode,hermes"])
+        self.assertCountEqual([r.agent for r in router.replies], ["opencode", "hermes"])
+        self.assertEqual(router.calls, 2)
+
 
 class TimeoutFallbackTest(unittest.TestCase):
     """⏱️ ফ্রি মডেল ধীর — ১৫০ সেকেন্ডে উত্তর না এলে আগে '❌ সাড়া দিতে পারিনি' আসত,
