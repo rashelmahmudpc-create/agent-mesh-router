@@ -39,19 +39,41 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Cloudflare secret আছে কি?
+      - name: Cloudflare token আছে কি?
         id: gate
         env:
           TOKEN: ${{ secrets.CF_API_TOKEN }}
-          ACCOUNT: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
-          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
+          if [ -z "$TOKEN" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "⏭️ CF_API_TOKEN / CF_ACCOUNT_ID নেই — ডিপ্লয় বাদ"
+            echo "⏭️ CF_API_TOKEN নেই — ডিপ্লয় বাদ (এই একটা secret হলেই হবে)"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "✅ Cloudflare secret পাওয়া গেছে — ডিপ্লয় শুরু"
+            echo "✅ CF_API_TOKEN পাওয়া গেছে — ডিপ্লয় শুরু"
           fi
+
+      - name: Account ID খুঁজে নাও (আলাদা করে দিতে হবে না)
+        id: account
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          TOKEN: ${{ secrets.CF_API_TOKEN }}
+          GIVEN: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          set -uo pipefail
+          if [ -n "${GIVEN:-}" ]; then
+            echo "id=$GIVEN" >> "$GITHUB_OUTPUT"
+            echo "✅ Account ID secret থেকে নেওয়া হলো"
+            exit 0
+          fi
+          ID=$(curl -s -H "Authorization: Bearer $TOKEN" https://api.cloudflare.com/client/v4/accounts \
+            | python3 -c "import json,sys; r=json.load(sys.stdin).get('result') or []; print(r[0]['id'] if r else '')" 2>/dev/null || true)
+          if [ -z "$ID" ]; then
+            echo "❌ Account ID পাওয়া গেল না — টোকেনে Workers permission আছে কি না দেখুন"
+            echo "id=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          echo "✅ Account ID নিজেই পাওয়া গেছে"
 
       - uses: actions/setup-node@v4
         if: steps.gate.outputs.skip != 'true'
@@ -63,11 +85,11 @@ jobs:
         run: node tests/js/worker_check.mjs
 
       - name: Deploy → Cloudflare
-        if: steps.gate.outputs.skip != 'true'
+        if: steps.gate.outputs.skip != 'true' && steps.account.outputs.id != ''
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
-          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          accountId: ${{ steps.account.outputs.id }}
           workingDirectory: worker
           command: deploy
 
@@ -76,7 +98,7 @@ jobs:
         working-directory: worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.account.outputs.id }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_API_KEY_2: ${{ secrets.OPENROUTER_API_KEY_2 }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -108,7 +130,7 @@ jobs:
         id: url
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_ACCOUNT_ID: ${{ steps.account.outputs.id }}
         run: |
           set -uo pipefail
           SUB=$(curl -s -H "Authorization: Bearer $CF_API_TOKEN" \

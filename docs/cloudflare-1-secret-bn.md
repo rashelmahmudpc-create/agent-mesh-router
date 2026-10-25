@@ -1,4 +1,4 @@
-# ☁️ Cloudflare — আমি সব করব, তুমি শুধু ২টা মান বসাবে
+# ☁️ Cloudflare — আমি সব করব, তুমি শুধু **১টা** মান বসাবে
 
 > **কেন তোমাকে key দিতে হবে না:** আমার স্যান্ডবক্স থেকে `api.cloudflare.com`-এ নেটওয়ার্কই নেই (পরীক্ষা করে দেখেছি — ব্লকড)।
 > তাই key আমাকে চ্যাটে দিলে **কিছুই হবে না**, শুধু ঝুঁকি বাড়বে।
@@ -31,11 +31,9 @@ GitHub Actions (worker.yml)
 3. **Continue to summary** → **Create Token**
 4. যা দেখাবে (`xxxxx…`) — **কপি করো**
 
-## ২️⃣ Account ID কপি করো
+## ২️⃣ ওটা GitHub-এ বসাও
 
-👉 https://dash.cloudflare.com/ → ডান পাশে **Account ID** → কপি
-
-## ৩️⃣ দুটোই GitHub-এ বসাও
+> Account ID আর দিতে হবে না — ওয়ার্কফ্লো নিজেই খুঁজে নেয়।
 
 👉 https://github.com/rashelmahmudpc-create/agent-mesh-router/settings/secrets/actions
 
@@ -44,9 +42,8 @@ GitHub Actions (worker.yml)
 | Name | Secret |
 |---|---|
 | `CF_API_TOKEN` | ১ ধাপে পাওয়া টোকেন |
-| `CF_ACCOUNT_ID` | ২ ধাপের Account ID |
 
-> ⚠️ নাম **হুবহু** এভাবেই লিখো (বড় হাতের অক্ষর, আন্ডারস্কোর)।
+> ⚠️ নাম **হুবহু** `CF_API_TOKEN` লিখো (বড় হাতের অক্ষর, আন্ডারস্কোর)।
 
 ---
 
@@ -75,7 +72,7 @@ GitHub Actions (worker.yml)
 
 | লক্ষণ | কারণ | সমাধান |
 |---|---|---|
-| রানে `⏭️ ডিপ্লয় বাদ` | secret নাম মেলেনি | `CF_API_TOKEN` / `CF_ACCOUNT_ID` হুবহু লিখো |
+| রানে `⏭️ ডিপ্লয় বাদ` | secret নাম মেলেনি | `CF_API_TOKEN` হুবহু লিখো |
 | `Authentication error` | টোকেনে Workers permission নেই | টেমপ্লেট থেকে নতুন টোকেন |
 | `fast:false` | provider key বসেনি | repo secret-এ OPENROUTER/GROQ/GEMINI আছে কি না দেখো |
 | উত্তর আসে না | key-র কোটা | `/api/health`-এর `providers` দেখো |
