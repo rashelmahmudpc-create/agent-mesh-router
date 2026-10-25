@@ -122,7 +122,7 @@
           "--output-format",
           "text",
           "--model",
-          "$CLAUDE_FALLBACK_MODEL:-z-ai/glm-5.2:free"
+          "minimax/minimax-m3:free"
         ],
         [
           "claude",
@@ -131,7 +131,16 @@
           "--output-format",
           "text",
           "--model",
-          "$CLAUDE_FALLBACK_MODEL_2:-openrouter/free"
+          "nvidia/nemotron-3-ultra-550b-a55b:free"
+        ],
+        [
+          "claude",
+          "-p",
+          "{message}",
+          "--output-format",
+          "text",
+          "--model",
+          "qwen/qwen3.8-27b:free"
         ]
       ]
     },
@@ -151,7 +160,7 @@
         "-q",
         "{message}",
         "-m",
-        "$HERMES_MODEL:-openrouter/free",
+        "openrouter/free",
         "--provider",
         "openrouter",
         "-Q",
@@ -171,7 +180,7 @@
         "মনে",
         "পরিকল্পনা"
       ],
-      "notes": "pip দিয়ে ইনস্টল (hermes-agent 0.19.0)। `-q` = এক প্রশ্ন এক উত্তর, `-Q` = পরিষ্কার আউটপুট। মডেল: HERMES_MODEL (ডিফল্ট openrouter/free)",
+      "notes": "ফ্রি মডেল চেইন: openrouter/free → minimax/minimax-m3:free → nvidia/nemotron-3-ultra-550b-a55b:free → qwen/qwen3.8-27b:free (OpenRouter এ ফ্রি তালিকা বদলায়, তাই একাধিক ধাপ)",
       "fallback_commands": [
         [
           "hermes",
@@ -179,7 +188,35 @@
           "-q",
           "{message}",
           "-m",
-          "$HERMES_FALLBACK_MODEL:-z-ai/glm-5.2:free",
+          "minimax/minimax-m3:free",
+          "--provider",
+          "openrouter",
+          "-Q",
+          "--yolo",
+          "--max-turns",
+          "3"
+        ],
+        [
+          "hermes",
+          "chat",
+          "-q",
+          "{message}",
+          "-m",
+          "nvidia/nemotron-3-ultra-550b-a55b:free",
+          "--provider",
+          "openrouter",
+          "-Q",
+          "--yolo",
+          "--max-turns",
+          "3"
+        ],
+        [
+          "hermes",
+          "chat",
+          "-q",
+          "{message}",
+          "-m",
+          "qwen/qwen3.8-27b:free",
           "--provider",
           "openrouter",
           "-Q",

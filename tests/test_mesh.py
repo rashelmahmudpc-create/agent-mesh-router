@@ -631,3 +631,34 @@ class CleanReplyTest(unittest.TestCase):
         reply = adapter.send("হাই")
         self.assertTrue(reply.ok)
         self.assertEqual(reply.text, "আসল উত্তর")
+
+
+class FreeChainTest(unittest.TestCase):
+    def test_unavailable_for_free_triggers_next_model(self):
+        from mesh.textutil import looks_like_quota_problem
+
+        self.assertTrue(looks_like_quota_problem(
+            "HTTP 404: This model is unavailable for free. The paid version is available now"))
+
+    def test_agents_have_multi_step_free_chain(self):
+        config = MeshConfig.load()
+        for name in ("hermes", "claude"):
+            agent = config.get(name)
+            self.assertGreaterEqual(len(agent.fallback_commands), 2, f"{name}: অন্তত ২টা বিকল্প মডেল দরকার")
+
+    def test_chain_moves_to_next_model_when_first_is_paid(self):
+        calls = []
+
+        def runner(cmd, env, cwd, timeout):
+            calls.append(cmd)
+            if "minimax/minimax-m3:free" in cmd:
+                return 0, "দ্বিতীয় মডেলের উত্তর", ""
+            return 1, "", "404 This model is unavailable for free"
+
+        agent = MeshConfig.load().get("hermes")
+        from mesh.adapters import CliAdapter
+
+        reply = CliAdapter(agent, runner=runner, environ={"OPENROUTER_API_KEY": "k"}).send("হাই")
+        self.assertTrue(reply.ok)
+        self.assertEqual(reply.text, "দ্বিতীয় মডেলের উত্তর")
+        self.assertGreaterEqual(len(calls), 2)
