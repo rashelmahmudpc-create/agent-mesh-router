@@ -78,9 +78,12 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(hermes.kind, "cli")
         self.assertTrue(hermes.has_role("worker"))
 
-    def test_openhands_not_in_group_chat(self):
+    def test_openhands_joins_group_chat_with_a_daily_cap(self):
+        """priority 1 — কিন্তু কোটা বাঁচাতে দিনে সীমিত।"""
         config = all_enabled_config()
-        self.assertNotIn("openhands", [a.name for a in config.chat_agents()])
+        names = [a.name for a in config.chat_agents()]
+        self.assertIn("openhands", names)
+        self.assertEqual(config.get("openhands").daily_limit, 2)
 
 
 class ClassifyTest(unittest.TestCase):
@@ -448,13 +451,23 @@ class WorkflowFileTest(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
         self.assertNotIn("cache: npm", text)
 
-    def test_openhands_is_tested_live_once_a_day(self):
-        """OPENHANDS_API_KEY আসলেই কাজ করে কি না — workflow নিজেই দিনে একবার যাচাই করবে।"""
+    def test_openhands_answers_in_the_group_chat(self):
+        """priority 1 — OpenHands এখন গ্রুপ চ্যাটেও উত্তর দেয়, আলাদা key-টেস্ট লাগে না।"""
+        from mesh.config import MeshConfig
+
+        spec = MeshConfig.load().get("openhands")
+        self.assertIn("chat", spec.roles)
+        self.assertEqual(spec.daily_limit, 2)
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
-        self.assertIn("OpenHands live check", text)
-        self.assertIn("--openhands", text)
-        self.assertIn(".mesh-openhands-ok", text)
-        self.assertIn("openhands.txt", text)
+        self.assertIn("OpenHands কোটা", text)
+        self.assertIn(".mesh-daily.json", text)
+
+    def test_daily_budget_survives_across_runs(self):
+        """প্রতিটা রান আলাদা checkout — তাই হিসাব repo-র ফাইলে থাকতে হবে।"""
+        text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
+        block = text.split("দিনের হিসাব সেভ")[1].split("- name:")[0]
+        self.assertIn("git commit", block)
+        self.assertIn(".mesh-daily.json", block)
 
     def test_hermes_gets_enough_turns_and_free_models(self):
         """--max-turns 3-এ Hermes উত্তর দেওয়ার আগেই থেমে যেত।"""
@@ -542,9 +555,10 @@ class CommandEnvTest(unittest.TestCase):
         # যাচাই করা এজেন্ট চালু
         for name in ("opencode", "claude", "hermes"):
             self.assertIn(name, active)
-        # key আছে — OpenHands এখন সক্রিয় (কিন্তু গ্রুপ চ্যাটে নয়)
+        # key আছে + গ্রুপ চ্যাটেও উত্তর দেয় (দিনে ২টার সীমা নিয়ে)
         self.assertIn("openhands", active)
-        self.assertNotIn("openhands", [a.name for a in config.chat_agents()])
+        self.assertIn("openhands", [a.name for a in config.chat_agents()])
+        self.assertEqual(config.get("openhands").daily_limit, 2)
 
 
 class DoctorHonestyTest(unittest.TestCase):
@@ -935,6 +949,66 @@ class OpenHandsCloudTest(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertEqual(result.text, "ঠিক আছি")
         self.assertGreaterEqual(len(tried), 2)
+
+
+class DailyCapTest(unittest.TestCase):
+    def _tmp(self):
+        return Path(tempfile.mkdtemp()) / ".mesh-daily.json"
+
+    def test_counts_today_and_resets_next_day(self):
+        from mesh import dailycap
+
+        path = self._tmp()
+        self.assertEqual(dailycap.used("openhands", path=path, today="2026-10-25"), 0)
+        dailycap.bump("openhands", path=path, today="2026-10-25")
+        dailycap.bump("openhands", path=path, today="2026-10-25")
+        self.assertEqual(dailycap.used("openhands", path=path, today="2026-10-25"), 2)
+        self.assertEqual(dailycap.remaining("openhands", 2, path=path, today="2026-10-25"), 0)
+        # নতুন দিন — আবার পূর্ণ কোটা
+        self.assertEqual(dailycap.used("openhands", path=path, today="2026-10-26"), 0)
+        self.assertEqual(dailycap.remaining("openhands", 2, path=path, today="2026-10-26"), 2)
+
+    def test_broken_file_does_not_crash(self):
+        from mesh import dailycap
+
+        path = self._tmp()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("not json", encoding="utf-8")
+        self.assertEqual(dailycap.used("openhands", path=path, today="2026-10-25"), 0)
+
+    def test_router_skips_agent_over_its_daily_limit(self):
+        """সীমা শেষ হলে ডাকা হবে না — কিন্তু রান ভাঙবে না।"""
+        from unittest import mock
+
+        from mesh.config import AgentSpec, MeshConfig, Settings
+        from mesh.router import Router
+
+        spec = AgentSpec(name="openhands", kind="openhands_cloud", roles=["chat"], daily_limit=1)
+        config = MeshConfig(settings=Settings(), agents=[spec])
+        from mesh.chat import Store
+
+        store = Store(Path(tempfile.mkdtemp()) / "t.jsonl")
+        with mock.patch("mesh.dailycap.used", return_value=1) as used:
+            router = Router(config=config, dry_run=True, store=store)
+            reply = router.call("openhands", "হাই")
+        used.assert_called()
+        self.assertFalse(reply.ok)
+        self.assertIn("আজকের কোটা শেষ", reply.text)
+
+    def test_successful_call_uses_one_slot(self):
+        from unittest import mock
+
+        from mesh.config import AgentSpec, MeshConfig, Settings
+        from mesh.router import Router
+
+        spec = AgentSpec(name="openhands", kind="openhands_cloud", roles=["chat"], daily_limit=1)
+        config = MeshConfig(settings=Settings(), agents=[spec])
+        from mesh.chat import Store
+
+        store = Store(Path(tempfile.mkdtemp()) / "t.jsonl")
+        with mock.patch("mesh.dailycap.bump") as bump, mock.patch("mesh.dailycap.used", return_value=0):
+            Router(config=config, dry_run=True, store=store).call("openhands", "হাই")
+        bump.assert_called_once_with("openhands")
 
 
 class KeyStateTest(unittest.TestCase):
