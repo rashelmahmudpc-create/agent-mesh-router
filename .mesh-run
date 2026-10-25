@@ -1,4 +1,4 @@
 # 🚀 অটো-রান সুইচ
 
-# সময় (UTC): 2026-10-25T16:10:00Z
-# কারণ: Cloudflare ডিপ্লয় এখন স্যারের আগের secret (ADMISSIONSKY_CLOUDFLARE_API_KEY) নিজেই খুঁজে নেয়
+# সময় (UTC): 2026-10-25T16:40:00Z
+# কারণ: Cloudflare — সব key প্রার্থী যাচাই করে যেটা কাজ করে সেটাই ব্যবহার (Global API Key সাপোর্ট)
