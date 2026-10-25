@@ -206,6 +206,7 @@ body.kb #composer{padding-bottom:8px}
 .dfoot button:active{background:var(--surface)}
 .sbody{flex:1;overflow-y:auto;padding:4px 16px 30px}
 .sec{margin:18px 0 8px;font-size:12.5px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.note{margin:0 0 8px;font-size:13px;line-height:1.7;color:var(--muted)}
 .row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0}
 .row label{font-size:16px}.row small{display:block;color:var(--muted);font-size:13px;margin-top:2px}
 .themes{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
@@ -335,6 +336,13 @@ pre.contract{background:var(--code);border:1px solid var(--line);border-radius:1
     <input class="field" id="sToken" placeholder="টোকেন (ঐচ্ছিক)" autocapitalize="off" autocorrect="off" type="password">
     <button class="btn2" id="sTest"><span data-ic="refresh" data-s="18"></span>কানেকশন টেস্ট</button>
 
+    <div class="sec">GitHub সরাসরি (Worker ছাড়া)</div>
+    <p class="note">সার্ভার/Docker/Worker কিছুই লাগবে না — শুধু একটা GitHub টোকেন বসান, অ্যাপ নিজেই Issue-এ কথা বলে উত্তর নিয়ে আসবে। 📱 টোকেন শুধু আপনার ফোনে জমা থাকে।</p>
+    <input class="field" id="sGhRepo" placeholder="owner/repo" autocapitalize="off" autocorrect="off">
+    <input class="field" id="sGhIssue" placeholder="Issue নম্বর (যেমন 3)" inputmode="numeric" autocapitalize="off" autocorrect="off">
+    <input class="field" id="sGhToken" placeholder="GitHub টোকেন (Issues: Read & Write)" autocapitalize="off" autocorrect="off" type="password">
+    <button class="btn2" id="sGhTest"><span data-ic="refresh" data-s="18"></span>GitHub টেস্ট</button>
+
     <div class="sec">এজেন্ট টিম</div>
     <div id="agentList"></div>
 
@@ -423,12 +431,21 @@ const DEMO_AGENTS=[
  {id:'des',name:'ডিজাইনার',role:'UI/UX',emoji:'🎨',color:'#ec4899'},
  {id:'qa',name:'টেস্টার',role:'কোয়ালিটি',emoji:'🧪',color:'#f59e0b'},
  {id:'wri',name:'রাইটার',role:'লেখা',emoji:'✍️',color:'#8b5cf6'}];
-const cfg=Object.assign({theme:'dark',accent:'#d97757',fs:17,name:'',server:'',token:'',demo:true,lang:'bn-BD',speak:true,mode:'agent'},lsGet('ax.cfg',{}));
+// মেশের আসল এজেন্টরা — Issue-এর `<!-- mesh:id -->` মার্কার থেকে চেনা যায়
+const REAL_AGENTS=[
+ {id:'opencode',name:'OpenCode',role:'ফ্রি মডেল',emoji:'🧑‍💻',color:'#10b981'},
+ {id:'cline',name:'Cline',role:'কোড',emoji:'🟦',color:'#3b82f6'},
+ {id:'claude',name:'Claude Code',role:'প্ল্যান/কোড',emoji:'🟠',color:'#d97757'},
+ {id:'hermes',name:'Hermes',role:'ম্যানেজার',emoji:'☤',color:'#8b5cf6'},
+ {id:'openhands',name:'OpenHands',role:'অটোমেশন',emoji:'🖐️',color:'#f59e0b'}];
+const cfg=Object.assign({theme:'dark',accent:'#d97757',fs:17,name:'',server:'',token:'',demo:true,lang:'bn-BD',speak:true,mode:'agent',ghRepo:'rashelmahmudpc-create/agent-mesh-router',ghIssue:'3',ghToken:''},lsGet('ax.cfg',{}));
 const S={chats:lsGet('ax.chats',[]),cur:null,busy:false,ac:null,atts:[],agents:DEMO_AGENTS,conn:'demo',stick:true,dict:null};
 const ELS=new WeakMap();
 const saveCfg=()=>lsSet('ax.cfg',cfg);
 const saveChats=()=>lsSet('ax.chats',S.chats.slice(0,60));
-const isDemo=()=>cfg.demo||!cfg.server.trim();
+// ফাঁকা সার্ভার + GitHub টোকেন থাকলে = "GitHub সরাসরি" মোড (Worker ছাড়া)
+const isGh=()=>!cfg.server.trim()&&!!String(cfg.ghToken||'').trim();
+const isDemo=()=>cfg.demo||(!cfg.server.trim()&&!isGh());
 const curChat=()=>S.chats.find(c=>c.id===S.cur);
 const feed=$('#feed'),scroller=$('#scroll'),inp=$('#inp');
 
@@ -592,7 +609,7 @@ const WELCOME={
  group:[['💬','সবাই পরিচয় দাও','সবাই নিজের পরিচয় দাও'],['🧠','ব্রেনস্টর্ম','একটা নতুন অ্যাপের আইডিয়া নিয়ে সবাই মত দাও'],['⚖️','তর্ক-বিতর্ক','React না Vue — সবাই নিজের মত দাও'],['🚀','প্ল্যান বানাও','একটা প্রজেক্টের প্ল্যান সবাই মিলে বানাও']]
 };
 function welcomeHTML(){
-  const st=isDemo()?['','ডেমো মোড']:S.conn==='ok'?['ok','সার্ভারে সংযুক্ত']:S.conn==='bad'?['bad','সার্ভার পাওয়া যাচ্ছে না']:['','সংযোগ হচ্ছে…'];
+  const st=isDemo()?['','ডেমো মোড']:S.conn==='ok'?['ok',isGh()?'GitHub-এ সংযুক্ত':'সার্ভারে সংযুক্ত']:S.conn==='bad'?['bad',isGh()?'GitHub পাওয়া যাচ্ছে না':'সার্ভার পাওয়া যাচ্ছে না']:['','সংযোগ হচ্ছে…'];
   const g=cfg.mode==='agent'?'কী করতে হবে লিখুন — বাকিটা এজেন্টরা দেখবে।':'গ্রুপে সবাই আছে — একটা কথা বলুন, যে যার মতো উত্তর দেবে।';
   return `<div class="welcome"><div class="logo">${ic('sparkle',38)}</div><h1>আসসালামু আলাইকুম${cfg.name?', '+esc(cfg.name):''} 👋</h1><p>${g}</p><div class="cards">${WELCOME[cfg.mode].map(c=>`<button class="card" data-q="${esc(c[2])}"><span class="e">${c[0]}</span>${c[1]}</button>`).join('')}</div><button class="conn-chip ${st[0]}" id="chipSet"><i></i>${st[1]}</button></div>`;
 }
@@ -688,8 +705,20 @@ $('#atts').addEventListener('click',e=>{const r=e.target.closest('[data-rm]');if
 /* ---------- networking ---------- */
 const base=()=>cfg.server.trim().replace(/\/+$/,'');
 const hdr=json=>{const h={};if(json)h['Content-Type']='application/json';if(cfg.token)h.Authorization='Bearer '+cfg.token;return h};
+/* GitHub সরাসরি: ব্রাউজার থেকে api.github.com-এ (CORS খোলা আছে) */
+const ghIssueNo=()=>String(cfg.ghIssue||'3').replace(/[^0-9]/g,'')||'3';
+const ghApi=p=>`https://api.github.com/repos/${String(cfg.ghRepo||'').trim()}${p}`;
+const ghHdr=json=>{const h={Accept:'application/vnd.github+json'};if(json)h['Content-Type']='application/json';if(cfg.ghToken)h.Authorization='Bearer '+String(cfg.ghToken).trim();return h};
+const ghOk=()=>/^[\w.-]+\/[\w.-]+$/.test(String(cfg.ghRepo||'').trim());
 async function ping(){
   if(isDemo()){S.conn='demo';paintConn();return}
+  if(isGh()){
+    try{
+      const r=await fetch(ghApi(`/issues/${ghIssueNo()}`),{headers:ghHdr()});
+      S.conn=r.ok?'ok':'bad';
+    }catch{S.conn='bad'}
+    paintConn();return;
+  }
   try{
     const r=await fetch(base()+'/api/health',{headers:hdr()});
     S.conn=r.ok?'ok':'bad';
@@ -735,6 +764,58 @@ async function netRun(req,onEv,sig){
     while((i=buf.indexOf('\n'))>=0){parseLine(buf.slice(0,i).trim(),onEv);buf=buf.slice(i+1)}
   }
   if(buf.trim())parseLine(buf.trim(),onEv);
+}
+
+/* ---------- GitHub সরাসরি (Worker ছাড়া) ---------- */
+// Actions রান মাপা হয়েছে ৩–৯ মিনিট — তাই ৫ মিনিট ধরে অপেক্ষা করি
+// (টেস্টে ছোট করা যায়: cfg.ghPollMs / ghQuietMs / ghWaitMs)
+const GH_WAIT_MS=()=>Number(cfg.ghWaitMs)||300000,GH_POLL_MS=()=>Number(cfg.ghPollMs)||3000,GH_QUIET_MS=()=>Number(cfg.ghQuietMs)||12000;
+function ghAgent(body){
+  const m=/<!--\s*mesh:([\w.-]+)\s*-->/.exec(body||'');
+  const id=(m?m[1]:'mgr').toLowerCase();
+  const list=[...S.agents,...REAL_AGENTS,...DEMO_AGENTS];
+  return list.find(a=>a.id===id)||list.find(a=>(a.name||'').toLowerCase()===id)||{id,name:id,role:'এজেন্ট',emoji:'🤖',color:'#888'};
+}
+const ghText=b=>String(b||'').replace(/<!--[\s\S]*?-->/g,'').trim();
+async function ghRun(req,onEv,sig){
+  if(!ghOk())throw new Error('GitHub রিপো ঠিকভাবে দিন (owner/repo হলে ভালো হয়)');
+  const issue=ghIssueNo(),since=new Date(Date.now()-3000).toISOString();
+  const names=(req.atts||[]).map(a=>a.name).filter(Boolean);
+  onEv({type:'status',text:'GitHub Issue-এ পাঠাচ্ছি…'});
+  const r=await fetch(ghApi(`/issues/${issue}/comments`),{method:'POST',headers:ghHdr(true),signal:sig,
+    body:JSON.stringify({body:`@mesh ${req.text}${names.length?`\n\n📎 ${names.join(', ')}`:''}\n\n<!-- app:${Date.now()} -->`})});
+  if(!r.ok)throw new Error(`GitHub HTTP ${r.status}`+(r.status===401?' — টোকেন ভুল/মেয়াদ শেষ':r.status===403?' — Issues: Write পারমিশন দিন':r.status===404?' — রিপো/Issue নম্বর দেখুন':''));
+  onEv({type:'thinking',text:'ম্যানেজার কাজটা ভাগ করছে…'});
+  onEv({type:'tool',id:'mesh',name:'মেশ',input:cfg.ghRepo,state:'running'});
+  const seen=new Set();let collected='',firstAt=0,beat=Date.now();const t0=Date.now();
+  while(Date.now()-t0<GH_WAIT_MS()){
+    await sleep(GH_POLL_MS(),sig);
+    // প্রতি ২০ সেকেন্ডে হৃদস্পন্দন — অ্যাপে যেন "আটকে গেছে" মনে না হয়
+    if(Date.now()-beat>20000){beat=Date.now();onEv({type:'status',text:`এখনো কাজ চলছে… ${Math.round((Date.now()-t0)/1000)} সেকেন্ড`})}
+    const q=await fetch(ghApi(`/issues/${issue}/comments?per_page=50&since=${encodeURIComponent(since)}`),{headers:ghHdr(),signal:sig});
+    if(!q.ok){onEv({type:'status',text:'GitHub-এ সমস্যা, আবার চেষ্টা…'});continue}
+    const rows=(await q.json()).filter(x=>x&&!seen.has(x.id)&&/<!--\s*mesh:/.test(x.body||''));
+    if(!rows.length){if(firstAt&&Date.now()-firstAt>GH_QUIET_MS())break;continue}
+    for(const row of rows){
+      seen.add(row.id);
+      const agent=ghAgent(row.body),txt=ghText(row.body);
+      if(!txt)continue;
+      if(req.mode==='group'){
+        onEv({type:'typing',agent});await sleep(120,sig);
+        await streamText(txt,t=>onEv({type:'agent_message',id:'m'+row.id,agent,delta:t}),sig,40,12);
+        onEv({type:'agent_message',id:'m'+row.id,agent,text:txt});
+      }else{
+        const block=`### ${agent.emoji} ${agent.name}\n\n${txt}\n\n`;
+        collected+=block;
+        await streamText(block,t=>onEv({type:'delta',text:t}),sig,60,8);
+      }
+      firstAt=firstAt||Date.now();
+    }
+    if(firstAt&&Date.now()-firstAt>GH_QUIET_MS())break;
+  }
+  onEv({type:'tool_result',id:'mesh',output:`${seen.size}টি উত্তর পাওয়া গেছে`});
+  if(req.mode==='agent'&&collected)onEv({type:'final',text:collected});
+  if(!seen.size)throw new Error(`এজেন্টের উত্তর আসেনি — Issue #${issue} খুলে দেখুন`);
 }
 
 
@@ -793,12 +874,12 @@ async function sendMessage(text,opts={}){
   const t0=Date.now();
   try{
     let uploaded=[];
-    if(!isDemo()&&atts.length){if(ctx.m){ctx.m.status='ফাইল আপলোড হচ্ছে…';refreshAI(ctx.m)}uploaded=await uploadAll(atts,sig)}
-    const run=isDemo()?demoRun:netRun;
+    if(!isDemo()&&!isGh()&&atts.length){if(ctx.m){ctx.m.status='ফাইল আপলোড হচ্ছে…';refreshAI(ctx.m)}uploaded=await uploadAll(atts,sig)}
+    const run=isDemo()?demoRun:isGh()?ghRun:netRun;
     await run({text,uploaded,mode:cfg.mode,chat,voice:opts.voice,atts},ev=>handleEv(ev,ctx),sig);
   }catch(e){
     if(e.name==='AbortError'){if(ctx.m&&ctx.m.text)ctx.m.text+='\n\n_— থামানো হয়েছে_'}
-    else{const msg=(e.message||'সংযোগে সমস্যা')+(isDemo()?'':' — সার্ভারের ঠিকানা/টোকেন দেখুন');if(ctx.m)ctx.m.err=msg;else toast(msg)}
+    else{const msg=(e.message||'সংযোগে সমস্যা')+(isDemo()?'':isGh()?' — GitHub টোকেন/রিপো/Issue দেখুন':' — সার্ভারের ঠিকানা/টোকেন দেখুন');if(ctx.m)ctx.m.err=msg;else toast(msg)}
   }
   Object.values(ctx.typing).forEach(r=>r.remove());
   if(ctx.m){flush(ctx.m);ctx.m.live=false;ctx.m.dur=(Date.now()-t0)/1000;ctx.m.status='';refreshAI(ctx.m,true)}
@@ -957,6 +1038,7 @@ function buildSettings(){
   $('#accents').innerHTML=ACCENTS.map(c=>`<button style="background:${c}" class="${cfg.accent===c?'on':''}" data-c="${c}" aria-label="${c}"></button>`).join('');
   $('#sName').value=cfg.name;$('#sFs').value=cfg.fs;$('#sLang').value=cfg.lang;
   $('#sServer').value=cfg.server;$('#sToken').value=cfg.token;
+  $('#sGhRepo').value=cfg.ghRepo;$('#sGhIssue').value=cfg.ghIssue;$('#sGhToken').value=cfg.ghToken;
   $('#sSpeak').classList.toggle('on',cfg.speak);$('#sDemo').classList.toggle('on',cfg.demo);
 }
 $('#themes').onclick=e=>{const b=e.target.closest('[data-t]');if(!b)return;cfg.theme=b.dataset.t;saveCfg();applyTheme();buildSettings();reMermaid()};
@@ -969,6 +1051,16 @@ $('#sSpeak').onclick=()=>{cfg.speak=!cfg.speak;saveCfg();buildSettings()};
 $('#sDemo').onclick=()=>{cfg.demo=!cfg.demo;saveCfg();buildSettings();ping()};
 $('#sServer').onchange=e=>{cfg.server=e.target.value.trim();if(cfg.server)cfg.demo=false;saveCfg();buildSettings();ping()};
 $('#sToken').onchange=e=>{cfg.token=e.target.value.trim();saveCfg();ping()};
+/* GitHub সরাসরি — টোকেন বসালেই ডেমো বন্ধ হয়ে আসল উত্তর আসবে */
+$('#sGhRepo').onchange=e=>{cfg.ghRepo=e.target.value.trim();saveCfg();ping()};
+$('#sGhIssue').onchange=e=>{cfg.ghIssue=e.target.value.trim().replace(/[^0-9]/g,'')||'3';saveCfg();buildSettings();ping()};
+$('#sGhToken').onchange=e=>{cfg.ghToken=e.target.value.trim();if(cfg.ghToken&&!cfg.server.trim())cfg.demo=false;saveCfg();buildSettings();ping()};
+$('#sGhTest').onclick=async()=>{
+  if(!ghOk()){toast('রিপো owner/repo আকারে দিন');return}
+  if(!String(cfg.ghToken||'').trim()){toast('আগে GitHub টোকেন বসান');return}
+  const d=cfg.demo;cfg.demo=false;await ping();cfg.demo=d;
+  toast(S.conn==='ok'?'GitHub সংযোগ সফল ✓':'হয়নি ✗ — টোকেন/Issue নম্বর দেখুন');
+};
 $('#sTest').onclick=async()=>{
   if(!cfg.server.trim()){toast('আগে সার্ভারের ঠিকানা দিন');return}
   const d=cfg.demo;cfg.demo=false;await ping();cfg.demo=d;

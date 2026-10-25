@@ -24,6 +24,7 @@ ALLOWED_CDN = (
     "fonts.gstatic.com",
     "cdn.jsdelivr.net",
     "cdnjs.cloudflare.com",
+    "api.github.com",  # GitHub সরাসরি মোড (Worker ছাড়া) — ব্রাউজার থেকে Issue পড়া/লেখা
     "your-server.com",  # সেটিংসের প্লেসহোল্ডার
 )
 

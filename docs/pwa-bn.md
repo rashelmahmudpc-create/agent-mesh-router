@@ -37,9 +37,24 @@ python3 -m http.server 8080 --directory docs/app
   এক মিনিট পর ঠিকানা: `https://<ইউজারনেম>.github.io/agent-mesh-router/app/`
 - চাইলে Cloudflare Pages-এও দেওয়া যায় (build command নেই, output folder = `docs/app`)
 
-## ৩️⃣ লাইভ করা — আসল এজেন্টরা উত্তর দেবে (ঐচ্ছিক)
+## ৩️⃣ লাইভ করা — সবচেয়ে সহজ: শুধু একটা GitHub টোকেন (Worker/সার্ভার নেই)
 
-### Worker ডিপ্লয় (একবারের কাজ)
+কোনো টার্মিনাল, Cloudflare বা Worker লাগবে না — অ্যাপ নিজেই ব্রাউজার থেকে
+GitHub Issue-এ কথা বলে উত্তর নিয়ে আসে।
+
+1. GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**
+2. **Repository access:** Only select repositories → `agent-mesh-router`
+3. **Permissions → Repository permissions → Issues: Read and write** (ব্যস, আর কিছু নয়)
+4. টোকেন কপি করুন → অ্যাপের সেটিংস (⋯) → **GitHub সরাসরি** →
+   `owner/repo` = `rashelmahmudpc-create/agent-mesh-router`, `Issue নম্বর` = `3`, টোকেন পেস্ট →
+   **GitHub টেস্ট** → চিপ 🟢 "GitHub-এ সংযুক্ত" হলেই লাইভ।
+
+> 🔐 টোকেন শুধু আপনার ফোনের `localStorage`-এ থাকে; কোনোকিছুতে আপলোড হয় না,
+> রিপোতে বা লগে যায় না। ফোন হারালে GitHub থেকে টোকেনটা revoke করে দিলেই হবে।
+
+### বিকল্প: Worker দিয়ে (নিজের সার্ভার চাইলে)
+
+#### Worker ডিপ্লয় (একবারের কাজ)
 
 ```bash
 cd worker
@@ -50,7 +65,7 @@ npx wrangler secret put APP_TOKEN       # অ্যাপে যে টোকে
 
 `wrangler.toml`-এ `MESH_REPO` আর `MESH_ISSUE` বসিয়ে দিন (হলঘর Issue নম্বর)।
 
-### অ্যাপে বসান
+#### অ্যাপে বসান
 
 সেটিংস (⋯) → **সার্ভার** = `https://mesh-chat.<আপনার-নাম>.workers.dev`
 → **টোকেন** = `APP_TOKEN` → **কানেকশন টেস্ট**।
