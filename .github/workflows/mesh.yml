@@ -42,17 +42,18 @@ concurrency:
 
 jobs:
   route:
-    # Issue এ `@mesh` লিখলে গ্রুপ চ্যাট শুরু হয়।
+    # Issue এ মালিক/সদস্য যেকোনো comment লিখলেই গ্রুপ চ্যাট শুরু হয়
+    # (`@mesh` লেখা লাগে না; স্ট্যাটাস-লগ Issue বাদ)।
     # 🔒 পাবলিক রিপো: শুধু মালিক/সদস্য/কোলাবরেটরই ডাকতে পারবে — নইলে যে কেউ এসে API কোটা খরচ করে দেবে।
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'push' ||
       github.event_name == 'schedule' ||
       (github.event_name == 'issue_comment'
-        && contains(github.event.comment.body, '@mesh')
         && github.event.comment.user.type != 'Bot'
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
-        && !contains(github.event.comment.body, '<!-- mesh:'))
+        && !contains(github.event.comment.body, '<!-- mesh:')
+        && !contains(github.event.issue.labels.*.name, 'mesh-status'))
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:

@@ -525,6 +525,14 @@ class WorkflowFileTest(unittest.TestCase):
         self.assertEqual(clean_reply(junk), "")
         self.assertEqual(clean_reply("আসল উত্তর " + junk), "আসল উত্তর")
 
+    def test_plain_comment_needs_no_at_mesh(self):
+        """মালিক Issue #3-এ শুধু 'হাই' লিখলেও যেন উত্তর আসে।"""
+        text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
+        cond = text.split("if: >")[1].split("runs-on")[0]
+        self.assertNotIn("contains(github.event.comment.body, '@mesh')", cond)
+        self.assertIn("author_association", cond)
+        self.assertIn("mesh-status", cond)
+
     def test_only_trusted_people_can_trigger_from_issue_comment(self):
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
         self.assertIn("author_association", text)
