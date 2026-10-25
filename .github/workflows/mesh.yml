@@ -102,27 +102,31 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Secret check (মান ছাপে না — শুধু আছে/নেই)
+      - name: 🔑 Key check (কোনটা সত্যিই কাজ করছে)
         if: steps.guard.outputs.skip != 'true'
         continue-on-error: true
         env:
-          K1: ${{ secrets.OPENROUTER_API_KEY }}
-          K2: ${{ secrets.OPENROUTER_API_KEY_2 }}
-          K3: ${{ secrets.GEMINI_API_KEY }}
-          K4: ${{ secrets.XAI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_API_KEY_2: ${{ secrets.OPENROUTER_API_KEY_2 }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+          CLINE_API_KEY: ${{ secrets.CLINE_API_KEY }}
+          VERCEL_AI_GATEWAY: ${{ secrets.VERCEL_AI_GATEWAY }}
+          CARTESIA_API_KEY: ${{ secrets.CARTESIA_API_KEY }}
+          COMPOSIO_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
         run: |
+          python -m mesh.cli --check-keys > keys.md 2>&1 || true
           {
-            echo "## 🔑 Secret যাচাই"
+            echo "## 🔑 Key check"
             echo ""
-            echo "| নাম | আছে? |"
-            echo "|---|---|"
-            for pair in "OPENROUTER_API_KEY:$K1" "OPENROUTER_API_KEY_2:$K2" "GEMINI_API_KEY:$K3" "XAI_API_KEY:$K4"; do
-              name="${pair%%:*}"; val="${pair#*:}"
-              if [ -n "$val" ]; then echo "| \`$name\` | ✅ হ্যাঁ |"; else echo "| \`$name\` | ❌ নেই |"; fi
-            done
+            cat keys.md
             echo ""
-            echo "> এই টেবিল দেখেই বোঝা যায় Secret ঠিক নামে বসেছে কি না।"
+            echo "> 🔒 কোনো key-এর মান কোথাও ছাপা হয় না — শুধু কাজ করছে কি না।"
           } >> "$GITHUB_STEP_SUMMARY"
+          echo "--- keycheck ---"; cat keys.md
 
       - name: Doctor (কে সাড়া দেবে?)
         if: steps.guard.outputs.skip != 'true'
@@ -228,6 +232,12 @@ jobs:
             echo '```'
             cat doctor.txt 2>/dev/null || echo "(ডক্টর চলে নি)"
             echo '```'
+            echo "</details>"
+            echo ""
+            echo "<details><summary>🔑 Key check</summary>"
+            echo ""
+            cat keys.md 2>/dev/null || echo "(চলে নি)"
+            echo ""
             echo "</details>"
             echo ""
             echo "<details><summary>📋 উত্তর</summary>"
