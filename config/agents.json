@@ -13,57 +13,135 @@
       "label": "🧑‍💻 OpenCode",
       "kind": "cli",
       "enabled": true,
-      "roles": ["worker", "chat"],
-      "command": ["opencode", "run", "--auto", "{message}"],
+      "roles": [
+        "worker",
+        "chat"
+      ],
+      "command": [
+        "opencode",
+        "run",
+        "--auto",
+        "{message}"
+      ],
       "timeout_sec": 900,
-      "keywords": ["code", "fix", "bug", "refactor", "test", "implement", "কোড", "বাগ", "ঠিক"],
-      "notes": "OpenCode এর ভেতরে DeepSeek V4.1 Flash ফ্রি — কোনো key লাগে না"
+      "keywords": [
+        "code",
+        "fix",
+        "bug",
+        "refactor",
+        "test",
+        "implement",
+        "কোড",
+        "বাগ",
+        "ঠিক"
+      ],
+      "notes": "যাচাই করা: opencode v2.1.4, `run --auto` ঠিক আছে; ডিফল্ট ফ্রি মডেল (flint-40b-free) — key লাগে না"
     },
     {
       "name": "cline",
       "label": "🟦 Cline",
       "kind": "cli",
       "enabled": true,
-      "roles": ["worker", "chat"],
-      "command": ["cline", "-y", "{message}"],
+      "roles": [
+        "worker",
+        "chat"
+      ],
+      "command": [
+        "cline",
+        "-y",
+        "{message}"
+      ],
       "timeout_sec": 900,
-      "keywords": ["ui", "frontend", "design", "review", "plan", "রিভিউ", "ডিজাইন"]
+      "keywords": [
+        "ui",
+        "frontend",
+        "design",
+        "review",
+        "plan",
+        "রিভিউ",
+        "ডিজাইন"
+      ],
+      "notes": "যাচাই করা: cline v3.0.73, `-y/--yolo` ও `--json` ঠিক আছে"
     },
     {
       "name": "claude",
       "label": "🟠 Claude Code",
       "kind": "cli",
       "enabled": true,
-      "roles": ["worker", "chat"],
-      "command": ["claude", "-p", "{message}"],
+      "roles": [
+        "worker",
+        "chat"
+      ],
+      "command": [
+        "claude",
+        "-p",
+        "{message}"
+      ],
       "timeout_sec": 900,
       "env": {
         "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
         "ANTHROPIC_AUTH_TOKEN": "$OPENROUTER_API_KEY",
-        "ANTHROPIC_API_KEY": ""
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_MODEL": "$CLAUDE_MODEL"
       },
-      "keys": ["OPENROUTER_API_KEY"],
-      "keywords": ["architecture", "hard", "refactor", "গুরুত্বপূর্ণ", "আর্কিটেকচার"]
+      "keys": [
+        "OPENROUTER_API_KEY"
+      ],
+      "keywords": [
+        "architecture",
+        "hard",
+        "refactor",
+        "গুরুত্বপূর্ণ",
+        "আর্কিটেকচার"
+      ],
+      "notes": "যাচাই করা: v2.1.310, `-p` ঠিক আছে। OpenRouter দিয়ে চালাতে ANTHROPIC_BASE_URL + AUTH_TOKEN + খালি API_KEY; মডেল বদলাতে CLAUDE_MODEL সেট করুন"
     },
     {
       "name": "hermes",
       "label": "☤ Hermes",
       "kind": "cli",
       "enabled": true,
-      "roles": ["worker", "chat", "memory"],
-      "command": ["hermes", "chat", "-q", "{message}"],
+      "roles": [
+        "worker",
+        "chat",
+        "memory"
+      ],
+      "command": [
+        "hermes",
+        "chat",
+        "-q",
+        "{message}"
+      ],
       "timeout_sec": 900,
-      "keys": ["OPENROUTER_API_KEY"],
-      "keywords": ["remember", "memory", "notes", "launch", "মনে", "পরিকল্পনা"]
+      "keys": [
+        "OPENROUTER_API_KEY"
+      ],
+      "keywords": [
+        "remember",
+        "memory",
+        "notes",
+        "launch",
+        "মনে",
+        "পরিকল্পনা"
+      ]
     },
     {
       "name": "openhands",
       "label": "🖐️ OpenHands",
       "kind": "github_issue",
       "enabled": true,
-      "roles": ["worker", "cloud"],
+      "roles": [
+        "worker",
+        "cloud"
+      ],
       "mention": "@openhands",
-      "keywords": ["issue", "pr", "big", "long", "বড়"],
+      "keywords": [
+        "issue",
+        "pr",
+        "big",
+        "long",
+        "বড়"
+      ],
       "notes": "ওদের ক্লাউডে ফ্রি চলে; ইনপুট যায় GitHub Issue দিয়ে, উত্তর আসে comment হিসেবে (async)"
     }
   ]

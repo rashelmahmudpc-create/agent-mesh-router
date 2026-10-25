@@ -230,3 +230,120 @@ class DoctorTest(unittest.TestCase):
 
     def test_store_is_writable(self):
         self.assertEqual(self._checks()["store"].status, "ok")
+
+
+class IssueHallTest(unittest.TestCase):
+    def _gh_runner(self, payload, capture=None):
+        import json as _json
+
+        def runner(cmd, env, cwd, timeout):
+            if capture is not None:
+                capture.append(cmd)
+            return 0, _json.dumps(payload), ""
+
+        return runner
+
+    def test_fetch_hall_reads_comments(self):
+        from mesh.issue import fetch_hall
+
+        payload = {
+            "title": "গ্রুপ চ্যাট",
+            "body": "শুরু করো",
+            "comments": [
+                {"author": {"login": "zayan"}, "body": "@mesh হাই সবাই"},
+                {"author": {"login": "bot"}, "body": "OpenCode বলছে: ঠিক আছে"},
+            ],
+        }
+        hall = fetch_hall(7, runner=self._gh_runner(payload))
+        self.assertIn("@zayan", hall)
+        self.assertIn("OpenCode", hall)
+        self.assertIn("গ্রুপ চ্যাট", hall)
+
+    def test_fetch_hall_redacts_secrets(self):
+        from mesh.issue import fetch_hall
+
+        payload = {"title": "x", "body": "", "comments": [
+            {"author": {"login": "a"}, "body": "key sk-or-v1-abcdef1234567890abc লিক হয়েছে"}]}
+        hall = fetch_hall(1, runner=self._gh_runner(payload))
+        self.assertNotIn("sk-or-v1-abcdef1234567890abc", hall)
+        self.assertIn("REDACTED", hall)
+
+    def test_fetch_hall_survives_gh_failure(self):
+        from mesh.issue import fetch_hall
+
+        def bad(cmd, env, cwd, timeout):
+            return 1, "", "gh: not found"
+
+        self.assertEqual(fetch_hall(1, runner=bad), "")
+
+    def test_post_comment_writes_marker_and_redacts(self):
+        from mesh.issue import post_comment
+
+        captured = []
+        ok = post_comment(
+            5, "opencode", "🧑‍💻 OpenCode", "উত্তর — key sk-ant-abcdefgh12345678",
+            runner=self._gh_runner({}, captured),
+        )
+        self.assertTrue(ok)
+        body = captured[0][captured[0].index("--body") + 1]
+        self.assertIn("mesh:opencode", body)
+        self.assertNotIn("sk-ant-abcdefgh12345678", body)
+
+    def test_post_comment_dry_run_does_not_call_gh(self):
+        from mesh.issue import post_comment
+
+        captured = []
+        self.assertTrue(post_comment(5, "cline", "Cline", "হাই", runner=self._gh_runner({}, captured), dry_run=True))
+        self.assertEqual(captured, [])
+
+
+class GroupHistoryTest(unittest.TestCase):
+    def test_history_reaches_the_prompt(self):
+        runner = FakeRunner()
+        router = make_router(runner)
+        router.group("নতুন প্রশ্ন", history="- @zayan: আগের কথা")
+        joined = " ".join(" ".join(cmd) for cmd, _env in runner.calls)
+        self.assertIn("আগের কথা", joined)
+        self.assertIn("হলঘরে", joined)
+
+    def test_direct_mode_ignores_history(self):
+        runner = FakeRunner()
+        router = make_router(runner)
+        router.direct("এই bug ঠিক করো")
+        joined = " ".join(" ".join(cmd) for cmd, _env in runner.calls)
+        self.assertNotIn("আগের কথা", joined)
+
+
+class RedactTest(unittest.TestCase):
+    def test_masks_common_key_shapes(self):
+        from mesh.issue import redact
+
+        text = " ".join([
+            "sk-or-v1-aaaaaaaaaaaaaaaaaaaa",
+            "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "xai-aaaaaaaaaaaaaaaaaaaa",
+            "Bearer abcdefghijklmnopqrstuvwxyz",
+        ])
+        out = redact(text)
+        for secret in text.split():
+            if secret != "Bearer":
+                self.assertNotIn(secret, out)
+        self.assertEqual(out.count("«REDACTED»"), 5)
+
+
+class GhEnvTest(unittest.TestCase):
+    def test_gh_calls_get_a_real_environment(self):
+        from mesh.issue import fetch_hall, post_comment
+
+        seen = []
+
+        def runner(cmd, env, cwd, timeout):
+            seen.append(dict(env))
+            return 0, "{}", ""
+
+        fetch_hall(1, runner=runner)
+        post_comment(1, "opencode", "OpenCode", "হাই", runner=runner)
+        self.assertTrue(seen)
+        for env in seen:
+            self.assertIn("PATH", env, "gh চালানোর জন্য PATH দরকার")

@@ -11,11 +11,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 
-from .adapters import Reply, subprocess_runner
+from .adapters import Reply
 from .chat import default_store
+from .issue import fetch_hall, post_comment
 from .config import MeshConfig
 from .router import Router
 
@@ -66,19 +66,6 @@ def _print_replies(replies: list[Reply]) -> None:
         print(reply.text.strip() or "(খালি উত্তর)")
 
 
-def _post_as_comments(issue: int, replies: list[Reply], dry_run: bool) -> None:
-    for reply in replies:
-        if not reply.ok:
-            continue
-        body = f"**{reply.label}**\n\n{reply.text.strip()}"
-        cmd = ["gh", "issue", "comment", str(issue), "--body", body]
-        if dry_run:
-            print(f"[dry-run] {' '.join(cmd[:4])} ...")
-            continue
-        code, out, err = subprocess_runner(cmd, dict(os.environ), ".", 120)
-        print(("✅ comment যোগ হয়েছে" if code == 0 else f"❌ comment ব্যর্থ: {err.strip()[:200]}"))
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="mesh", description="agent-mesh-router")
     parser.add_argument("message", nargs="?", default="", help="যে কথাটা এজেন্টদের বলতে চান")
@@ -117,10 +104,20 @@ def main(argv: list[str] | None = None) -> int:
         log=None if args.json else (lambda msg: print(msg, file=sys.stderr)),
     )
 
-    replies = router.group(args.message) if args.mode == "group" else router.direct(args.message)
+    history = fetch_hall(args.issue) if (args.issue and args.mode == "group") else ""
+    if history and not args.json:
+        print(f"🏛️ Issue #{args.issue} এর আগের আলোচনা পড়া হয়েছে ({len(history)} অক্ষর)", file=sys.stderr)
+
+    replies = (
+        router.group(args.message, history=history)
+        if args.mode == "group"
+        else router.direct(args.message)
+    )
 
     if args.issue:
-        _post_as_comments(args.issue, replies, args.dry_run)
+        for reply in replies:
+            if reply.ok:
+                post_comment(args.issue, reply.agent, reply.label, reply.text, dry_run=args.dry_run)
 
     if args.json:
         print(json.dumps([r.__dict__ for r in replies], ensure_ascii=False, indent=2))

@@ -169,19 +169,28 @@ class Router:
             futures = [pool.submit(self.call, name, message, sender) for name, sender in runnable]
             return [f.result() for f in futures]
 
-    def group(self, message: str) -> list[Reply]:
+    def group(self, message: str, history: str = "") -> list[Reply]:
+        """সবাইকে ডাকা হয়; `history` হলে (Issue এর পুরনো কথা) সেটাও পড়ে।"""
         targets: list[tuple[str, str]] = [(spec.name, "owner") for spec in self.config.chat_agents()]
         known = self.config.names()
         collected: list[Reply] = []
-        context = ""
+        context = history.strip()
 
         for round_no in range(self.config.settings.max_rounds):
             if not targets:
                 break
-            prompt = message if round_no == 0 else (
-                f"{message}\n\n[গ্রুপ চ্যাট পর্যন্ত যা হয়েছে]\n{context}\n\n"
-                "উপরের আলোচনা পড়ে নিজের মত সংক্ষেপে উত্তর দাও।"
-            )
+            if round_no == 0 and context:
+                prompt = (
+                    f"{message}\n\n[হলঘরে (Issue) আগে যা হয়েছে]\n{context}\n\n"
+                    "উপরের আলোচনা পড়ে নিজের মত সংক্ষেপে উত্তর দাও।"
+                )
+            elif round_no == 0:
+                prompt = message
+            else:
+                prompt = (
+                    f"{message}\n\n[গ্রুপ চ্যাট পর্যন্ত যা হয়েছে]\n{context}\n\n"
+                    "উপরের আলোচনা পড়ে নিজের মত সংক্ষেপে উত্তর দাও।"
+                )
             self.log(f"— রাউন্ড {round_no + 1}: {', '.join(name for name, _ in targets)}")
             round_replies = self._dispatch(targets, prompt)
             if not round_replies:
@@ -189,8 +198,8 @@ class Router:
             collected.extend(round_replies)
 
             context = "\n".join(
-                f"- {r.label}: {clip(r.text, 400)}" for r in collected if r.ok
-            ) or context
+                [context, *[f"- {r.label}: {clip(r.text, 400)}" for r in collected if r.ok]]
+            ).strip()
 
             next_targets: list[tuple[str, str]] = []
             for reply in round_replies:

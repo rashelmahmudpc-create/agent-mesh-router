@@ -70,7 +70,11 @@ class CliAdapter:
     def _base_env(self) -> dict[str, str]:
         env = dict(self.environ)
         for name, value in self.spec.env.items():
-            env[name] = expand_env_value(value, self.environ)
+            resolved = expand_env_value(value, self.environ)
+            # "$VAR" দিয়ে দেওয়া আর VAR নেই → সেট করব না (খালি মান বিভ্রান্তি তৈরি করে)
+            if not resolved and (value or "").startswith("$"):
+                continue
+            env[name] = resolved
         return env
 
     def send(self, message: str, sender: str = "owner") -> Reply:

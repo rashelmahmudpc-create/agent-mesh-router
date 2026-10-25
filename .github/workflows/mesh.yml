@@ -1,6 +1,7 @@
 name: agent-mesh
 
 # 🧠 ব্রেইন এখানেই (GitHub Actions) — ম্যানেজার কোড এই রিপোতে থাকে।
+# 📌 Issue এ `@mesh <কথা>` লিখলেই গ্রুপ চ্যাট শুরু; উত্তরগুলো ওই Issue-তেই comment হয়ে ফিরে আসে।
 on:
   workflow_dispatch:
     inputs:
@@ -36,7 +37,10 @@ jobs:
     # Issue এ `@mesh` লিখলে গ্রুপ চ্যাট শুরু হয়
     if: >
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@mesh'))
+      (github.event_name == 'issue_comment'
+        && contains(github.event.comment.body, '@mesh')
+        && github.event.comment.user.type != 'Bot'
+        && !contains(github.event.comment.body, '<!-- mesh:'))
     runs-on: ubuntu-latest
     timeout-minutes: 350
     steps:
@@ -77,6 +81,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_API_KEY_2: ${{ secrets.OPENROUTER_API_KEY_2 }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           MSG: ${{ github.event_name == 'workflow_dispatch' && inputs.message || github.event.comment.body }}
           MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'group' }}
           ISSUE: ${{ github.event.issue.number || '' }}
