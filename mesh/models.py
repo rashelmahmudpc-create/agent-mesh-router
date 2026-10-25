@@ -14,6 +14,7 @@ import json
 import urllib.request
 
 MODELS_URL = "https://openrouter.ai/api/v1/models"
+CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 MIN_CONTEXT = 64_000
 
 
@@ -79,3 +80,55 @@ def discover(timeout: int = 30) -> str | None:
 
 def discover_many(limit: int = 3, timeout: int = 30) -> list[str]:
     return pick_free_models(fetch_models(timeout=timeout), limit=limit)
+
+
+def model_responds(model_id: str, api_key: str, timeout: int = 25) -> bool:
+    """এই মডেলটা সত্যিই উত্তর দেয় কি না — ১ টোকেনের ছোট পরীক্ষা।
+
+    তালিকায় থাকলেও অনেক ফ্রি মডেল মরে থাকে ("Model unavailable") — তাই ব্যবহারের আগে যাচাই।
+    key না থাকলে যাচাই করা যায় না, তখন সত্যি ধরে নিই।
+    """
+    if not api_key:
+        return True
+    body = json.dumps(
+        {"model": model_id, "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]}
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        CHAT_URL,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "agent-mesh-router",
+            "Accept": "application/json",
+            "HTTP-Referer": "https://github.com/rashelmahmudpc-create/agent-mesh-router",
+            "X-Title": "agent-mesh-router",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            return 200 <= getattr(response, "status", 200) < 300
+    except Exception:  # 404/402/429 — এই মডেল এখন চলবে না
+        return False
+
+
+def discover_usable(
+    limit: int = 3,
+    api_key: str = "",
+    tries: int = 8,
+    timeout: int = 30,
+    fetcher=None,
+    checker=None,
+) -> list[str]:
+    """ফ্রি মডেলের তালিকা থেকে শুধু যেগুলো সত্যিই উত্তর দেয় সেগুলো।"""
+    models = (fetcher or fetch_models)(timeout=timeout)
+    candidates = pick_free_models(models, limit=tries)
+    check = checker or (lambda m: model_responds(m, api_key))
+    good: list[str] = []
+    for model in candidates:
+        if check(model):
+            good.append(model)
+        if len(good) >= limit:
+            break
+    return good
