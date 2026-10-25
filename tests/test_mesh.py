@@ -566,3 +566,9 @@ class AnsiAndFallbackTest(unittest.TestCase):
         reply = CliAdapter(spec, runner=runner).send("হাই")
         self.assertTrue(reply.ok)
         self.assertEqual(len(seen), 2)
+
+    def test_doctor_step_receives_secrets(self):
+        """ডক্টর step এ secret না থাকলে ভুল করে 'key নেই' বলে — এটা যেন না হয়।"""
+        text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
+        doctor_block = text.split("- name: Doctor")[1].split("- name:")[0]
+        self.assertIn("OPENROUTER_API_KEY", doctor_block)

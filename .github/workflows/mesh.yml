@@ -93,6 +93,15 @@ jobs:
 
       - name: Doctor (কে সাড়া দেবে?)
         continue-on-error: true
+        # 🔍 ডক্টরকে একই secret গুলো দিতে হবে, নইলে ভুল করে "key নেই" বলে
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_API_KEY_2: ${{ secrets.OPENROUTER_API_KEY_2 }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          OPENCODE_MODEL: ${{ vars.OPENCODE_MODEL }}
         run: |
           python -m mesh.cli --doctor > doctor.txt 2>&1 || true
           {
