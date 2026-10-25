@@ -5,7 +5,8 @@
     "max_rounds": 3,
     "max_calls_per_run": 8,
     "max_pair_calls": 3,
-    "reply_char_limit": 4000
+    "reply_char_limit": 4000,
+    "key_cooldown_sec": 3600
   },
   "agents": [
     {
@@ -47,7 +48,8 @@
           "$OPENCODE_FALLBACK_MODEL:-$FREE_M1",
           "{message}"
         ]
-      ]
+      ],
+      "priority": 2
     },
     {
       "name": "cline",
@@ -78,7 +80,8 @@
       "notes": "⚠️ বন্ধ: OpenRouter ফ্রি টিয়ারে Cline ২,৮৩,১১৫ টোকেন চায়, afford করে ৩৩,৩২৩ — 'requires more credits'। আপাতত OpenCode (fallback সহ) ও Claude Code যথেষ্ট",
       "env": {
         "OPENROUTER_API_KEY": "$OPENROUTER_API_KEY"
-      }
+      },
+      "priority": 5
     },
     {
       "name": "claude",
@@ -142,7 +145,8 @@
           "--model",
           "openrouter/free"
         ]
-      ]
+      ],
+      "priority": 4
     },
     {
       "name": "hermes",
@@ -224,12 +228,13 @@
           "--max-turns",
           "3"
         ]
-      ]
+      ],
+      "priority": 3
     },
     {
       "name": "openhands",
       "label": "🖐️ OpenHands",
-      "kind": "github_issue",
+      "kind": "openhands_cloud",
       "enabled": false,
       "roles": [
         "worker",
@@ -243,7 +248,11 @@
         "long",
         "বড়"
       ],
-      "notes": "⏸️ এখনো বন্ধ — ওদের GitHub App বসালেই চালু হবে। ধাপ: docs/openhands-setup-bn.md (৫ মিনিট)"
+      "notes": "ওদের ক্লাউড API (সবচেয়ে আগে ডাকা হবে)। OPENHANDS_API_KEY দিলেই সক্রিয় — python3 -m mesh.cli --openhands 'কাজ' দিয়ে একবার পরীক্ষাও করা যায়",
+      "priority": 1,
+      "keys": [
+        "OPENHANDS_API_KEY"
+      ]
     }
   ]
 }

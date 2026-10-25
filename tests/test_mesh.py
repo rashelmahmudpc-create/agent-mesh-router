@@ -766,3 +766,134 @@ class EmptyReplyDiagnosticsTest(unittest.TestCase):
         reply = adapter.send("হাই")
         self.assertFalse(reply.ok)
         self.assertIn("model not loaded", reply.text)
+
+
+class OpenHandsCloudTest(unittest.TestCase):
+    def test_reports_missing_key(self):
+        from mesh.openhands_cloud import ask
+
+        result = ask("হাই", api_key="")
+        self.assertFalse(result.ok)
+        self.assertIn("OPENHANDS_API_KEY", result.text)
+        self.assertEqual(result.detail, "no-key")
+
+    def test_uses_injected_sdk(self):
+        from mesh.openhands_cloud import ask
+
+        def factory(key, url, model):
+            self.assertEqual(key, "oh-test")
+            self.assertEqual(url, "https://app.all-hands.dev")
+
+            def run(message):
+                return f"ওদের ক্লাউড বলছে: {message}"
+
+            return run
+
+        result = ask("কাজ করো", api_key="oh-test", sdk_factory=factory)
+        self.assertTrue(result.ok)
+        self.assertIn("কাজ করো", result.text)
+
+    def test_sdk_error_is_reported_plainly(self):
+        from mesh.openhands_cloud import ask
+
+        def factory(*_args):
+            raise RuntimeError("401 Unauthorized")
+
+        result = ask("হাই", api_key="k", sdk_factory=factory)
+        self.assertFalse(result.ok)
+        self.assertIn("401 Unauthorized", result.text)
+        self.assertEqual(result.detail, "error")
+
+    def test_empty_answer_is_failure(self):
+        from mesh.openhands_cloud import ask
+
+        result = ask("হাই", api_key="k", sdk_factory=lambda *a: (lambda m: "   "))
+        self.assertFalse(result.ok)
+        self.assertEqual(result.detail, "empty")
+
+
+class KeyStateTest(unittest.TestCase):
+    def _state(self, tmp=None):
+        from mesh.keystate import KeyState
+
+        now = {"t": 1_000.0}
+        state = KeyState(Path(tmp or tempfile.mkdtemp()) / "keystate.json", now=lambda: now["t"])
+        return state, now
+
+    def test_failed_key_goes_to_back_and_recovers(self):
+        state, now = self._state()
+        keys = [("OPENROUTER_API_KEY", "a"), ("OPENROUTER_API_KEY_2", "b")]
+        state.mark_failed("OPENROUTER_API_KEY", seconds=600)
+        ordered = state.order(keys)
+        self.assertEqual(ordered[0][0], "OPENROUTER_API_KEY_2")
+        self.assertTrue(state.is_cooling("OPENROUTER_API_KEY"))
+        now["t"] += 601
+        self.assertFalse(state.is_cooling("OPENROUTER_API_KEY"))
+        self.assertEqual(state.order(keys)[0][0], "OPENROUTER_API_KEY")
+
+    def test_success_clears_cooldown(self):
+        state, _now = self._state()
+        state.mark_failed("OPENROUTER_API_KEY", seconds=600)
+        state.mark_ok("OPENROUTER_API_KEY")
+        self.assertFalse(state.is_cooling("OPENROUTER_API_KEY"))
+
+    def test_quota_error_marks_key_in_rotation(self):
+        state, _now = self._state()
+        spec = AgentSpec(name="claude", command=["claude", "-p", "{message}"], keys=["OPENROUTER_API_KEY"])
+
+        def runner(cmd, env, cwd, timeout):
+            return 1, "", "429 rate limit exceeded"
+
+        from mesh.adapters import CliAdapter
+
+        CliAdapter(spec, runner=runner, keystate=state, environ={"OPENROUTER_API_KEY": "k"}).send("হাই")
+        self.assertTrue(state.is_cooling("OPENROUTER_API_KEY"))
+
+    def test_success_does_not_mark(self):
+        state, _now = self._state()
+        spec = AgentSpec(name="claude", command=["claude", "-p", "{message}"], keys=["OPENROUTER_API_KEY"])
+        from mesh.adapters import CliAdapter
+
+        CliAdapter(
+            spec, runner=lambda c, e, w, t: (0, "ঠিক আছে", ""),
+            keystate=state, environ={"OPENROUTER_API_KEY": "k"},
+        ).send("হাই")
+        self.assertFalse(state.is_cooling("OPENROUTER_API_KEY"))
+
+
+class PriorityTest(unittest.TestCase):
+    def test_openhands_has_highest_priority(self):
+        config = MeshConfig.load()
+        priorities = {a.name: a.priority for a in config.agents}
+        self.assertEqual(min(priorities, key=priorities.get), "openhands")
+        self.assertLess(priorities["openhands"], priorities["claude"])
+
+    def test_claude_ranks_last_among_workers(self):
+        config = MeshConfig.load()
+        priorities = {a.name: a.priority for a in config.agents}
+        self.assertGreater(priorities["claude"], priorities["opencode"])
+        self.assertGreater(priorities["claude"], priorities["hermes"])
+
+    def test_router_prefers_higher_priority_on_tie(self):
+        router = make_router()
+        # কোনো কীওয়ার্ড বা mention নেই → ডিফল্ট; কিন্তু স্কোর সমান হলে priority আগে
+        self.assertEqual(router.classify("হাই"), [router.config.settings.default_agent])
+
+
+class OpenHandsAdapterTest(unittest.TestCase):
+    def test_dry_run_does_not_call_cloud(self):
+        from mesh.adapters import build_adapter
+
+        spec = MeshConfig.load().get("openhands")
+        adapter = build_adapter(spec, dry_run=True)
+        reply = adapter.send("হাই")
+        self.assertTrue(reply.ok)
+        self.assertIn("[dry-run]", reply.text)
+
+    def test_missing_key_gives_clear_message(self):
+        from mesh.adapters import build_adapter
+
+        spec = MeshConfig.load().get("openhands")
+        reply = build_adapter(spec, environ={}).send("হাই")
+        self.assertFalse(reply.ok)
+        self.assertIn("OPENHANDS_API_KEY", reply.text)

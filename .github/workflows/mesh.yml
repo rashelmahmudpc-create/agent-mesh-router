@@ -62,7 +62,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"   # openhands-sdk এর শর্ত
 
       # Node 22 দরকার (Claude Code এর শর্ত)
       - uses: actions/setup-node@v4
@@ -78,6 +78,10 @@ jobs:
           # ☤ Hermes — PyPI প্যাকেজ (যাচাই করা: hermes-agent 0.19.0)
           python -m pip install --user --quiet hermes-agent || true
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install OpenHands SDK (ঐচ্ছিক)
+        continue-on-error: true
+        run: python -m pip install --user --quiet openhands-sdk openhands-workspace || true
 
       - name: Verify CLIs
         continue-on-error: true
@@ -130,6 +134,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_API_KEY_2: ${{ secrets.OPENROUTER_API_KEY_2 }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           OPENCODE_MODEL: ${{ vars.OPENCODE_MODEL }}
           HERMES_MODEL: ${{ vars.HERMES_MODEL }}
@@ -179,6 +184,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_API_KEY_2: ${{ secrets.OPENROUTER_API_KEY_2 }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
           OPENCODE_MODEL: ${{ vars.OPENCODE_MODEL }}
           HERMES_MODEL: ${{ vars.HERMES_MODEL }}

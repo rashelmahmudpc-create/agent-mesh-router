@@ -113,7 +113,8 @@ class Router:
 
         low = (message or "").lower()
         scored: list[tuple[int, int, str]] = []
-        for order, spec in enumerate(self.config.enabled()):
+        ordered = sorted(self.config.enabled(), key=lambda a: (a.priority, a.name))
+        for order, spec in enumerate(ordered):
             if spec.name.lower() in exclude:
                 continue
             score = sum(1 for kw in spec.keywords if kw.lower() in low)
