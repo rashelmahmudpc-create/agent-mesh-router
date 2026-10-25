@@ -180,7 +180,7 @@
         "মনে",
         "পরিকল্পনা"
       ],
-      "notes": "মডেল প্রতিটা রানে অটো-বাছাই হয় (FREE_M1..M3 — OpenRouter এর তাজা ফ্রি তালিকা থেকে)। সব ব্যর্থ হলে শেষে openrouter/free",
+      "notes": "মডেল অটো-বাছাই (FREE_M1..M3)। সব খালি/ব্যর্থ হলে OpenCode এর ফ্রি মডেল দিয়ে শেষ চেষ্টা",
       "fallback_commands": [
         [
           "hermes",
@@ -216,9 +216,9 @@
           "-q",
           "{message}",
           "-m",
-          "openrouter/free",
+          "opencode/deepseek-v4.1-flash-free",
           "--provider",
-          "openrouter",
+          "opencode",
           "-Q",
           "--yolo",
           "--max-turns",
