@@ -21,6 +21,8 @@
         "opencode",
         "run",
         "--auto",
+        "--model",
+        "$OPENCODE_MODEL:-opencode/deepseek-v4.1-flash-free",
         "{message}"
       ],
       "timeout_sec": 900,
@@ -35,13 +37,13 @@
         "বাগ",
         "ঠিক"
       ],
-      "notes": "যাচাই করা: opencode v2.1.4, `run --auto` ঠিক আছে; ডিফল্ট ফ্রি মডেল (flint-40b-free) — key লাগে না"
+      "notes": "ফ্রি মডেল পিন করা হয়েছে (opencode/deepseek-v4.1-flash-free)। ভিন্ন মডেল চাইলে OPENCODE_MODEL ভেরিয়েবল দিন — নইলে OpenCode পেইড ডিফল্ট মডেলে গিয়ে 'requires more credits' দেয়"
     },
     {
       "name": "cline",
       "label": "🟦 Cline",
       "kind": "cli",
-      "enabled": true,
+      "enabled": false,
       "roles": [
         "worker",
         "chat"
@@ -49,6 +51,10 @@
       "command": [
         "cline",
         "-y",
+        "-P",
+        "openrouter",
+        "-k",
+        "$OPENROUTER_API_KEY",
         "{message}"
       ],
       "timeout_sec": 900,
@@ -61,7 +67,7 @@
         "রিভিউ",
         "ডিজাইন"
       ],
-      "notes": "যাচাই করা: cline v3.0.73, `-y/--yolo` ও `--json` ঠিক আছে"
+      "notes": "⚠️ বন্ধ: Cline CLI নিজের অ্যাকাউন্টে লগইন চায় ('Unauthorized')। OpenRouter key দিয়ে চালাতে enabled=true করুন (কমান্ডে -P openrouter -k $OPENROUTER_API_KEY দেওয়া আছে)"
     },
     {
       "name": "claude",
@@ -100,7 +106,7 @@
       "name": "hermes",
       "label": "☤ Hermes",
       "kind": "cli",
-      "enabled": true,
+      "enabled": false,
       "roles": [
         "worker",
         "chat",
@@ -124,13 +130,13 @@
         "মনে",
         "পরিকল্পনা"
       ],
-      "notes": "OpenRouter :free মডেলেও চলে; মডেলে ৬৪K context + tool calling লাগে"
+      "notes": "⚠️ বন্ধ: ইনস্টল কমান্ড এখনো যাচাই হয়নি (hermes বাইনারি Actions এ নেই)। ইনস্টল করে mesh.yml এ লাইন খুলে enabled=true করুন"
     },
     {
       "name": "openhands",
       "label": "🖐️ OpenHands",
       "kind": "github_issue",
-      "enabled": true,
+      "enabled": false,
       "roles": [
         "worker",
         "cloud"
@@ -143,7 +149,7 @@
         "long",
         "বড়"
       ],
-      "notes": "ওদের ক্লাউডে ফ্রি চলে; ইনপুট যায় GitHub Issue দিয়ে, উত্তর আসে comment হিসেবে (async)"
+      "notes": "⏸️ বন্ধ রাখা হলো:mention/org যাচাই হয়নি। যাচাই করে চালু করলে Issue হয়ে ওদের ক্লাউডে ফ্রি কাজ করবে"
     }
   ]
 }

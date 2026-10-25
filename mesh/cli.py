@@ -118,9 +118,10 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.issue:
+        # সফল ও ব্যর্থ — দুটোরই comment যায়, যাতে Issue দেখেই বোঝা যায় কী হলো
         for reply in replies:
-            if reply.ok:
-                post_comment(args.issue, reply.agent, reply.label, reply.text, dry_run=args.dry_run)
+            body = reply.text if reply.ok else f"❌ সাড়া দিতে পারিনি\n\n{reply.text}"
+            post_comment(args.issue, reply.agent, reply.label, body, dry_run=args.dry_run)
 
     if args.json:
         print(json.dumps([r.__dict__ for r in replies], ensure_ascii=False, indent=2))
