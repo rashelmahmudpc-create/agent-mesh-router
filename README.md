@@ -109,6 +109,23 @@ Hermes ও বাকিরা = **কর্মী**। বিস্তারি�
 
 👉 বিস্তারিত: **[`docs/free-models-bn.md`](docs/free-models-bn.md)**
 
+## 🔗 সরাসরি লিংক (কপি-পেস্ট)
+
+| কী করবেন | লিংক |
+|---|---|
+| 🔑 API key নিন (ফ্রি, কার্ড লাগে না) | https://openrouter.ai/keys |
+| 🔒 Secret বসান | https://github.com/rashelmahmudpc-create/agent-mesh-router/settings/secrets/actions |
+| 📋 Variable বসান (ঐচ্ছিক) | https://github.com/rashelmahmudpc-create/agent-mesh-router/settings/variables/actions |
+| ▶️ ম্যানুয়ালি চালান | https://github.com/rashelmahmudpc-create/agent-mesh-router/actions/workflows/mesh.yml |
+| ⚙️ রিপো সেটিংস | https://github.com/rashelmahmudpc-create/agent-mesh-router/settings |
+
+**ধাপ:** Secrets পেজ → `New repository secret` → Name: `OPENROUTER_API_KEY` → Secret: `sk-or-...` → **Add secret**
+
+> 💡 কমান্ড দিয়েও করা যায় (key চ্যাটে লিখবেন না):
+> ```bash
+> gh secret set OPENROUTER_API_KEY --repo rashelmahmudpc-create/agent-mesh-router
+> ```
+
 ## 🔑 GitHub Secrets এ যা বসাতে হবে
 
 ```
