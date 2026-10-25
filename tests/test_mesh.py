@@ -5,12 +5,16 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# 🧪 টেস্ট যেন আসল কোটা-ফাইল (`.mesh-daily.json`) না ছোঁয়
+os.environ["MESH_DAILY"] = str(Path(tempfile.mkdtemp()) / ".mesh-daily-test.json")
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -915,6 +919,14 @@ class OpenHandsCloudTest(unittest.TestCase):
         ]
         self.assertEqual(_last_text(NS(state=NS(events=events))), "হ্যাঁ, কাজ করছি")
         self.assertEqual(_last_text(NS(_state=NS(events=events))), "হ্যাঁ, কাজ করছি")
+
+    def test_sdk_banner_and_logs_stay_quiet(self):
+        """banner/log গুলো উত্তর হিসেবে Issue-তে যাওয়া উচিত নয়।"""
+        import os
+
+        import mesh.openhands_cloud  # noqa: F401
+
+        self.assertEqual(os.environ.get("OPENHANDS_SUPPRESS_BANNER"), "1")
 
     def test_no_answer_is_empty_not_object_repr(self):
         from mesh.openhands_cloud import _last_text

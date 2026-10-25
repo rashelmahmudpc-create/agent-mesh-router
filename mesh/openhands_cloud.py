@@ -11,8 +11,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
+
+# 🧹 SDK-র বড় banner আর JSON log যেন Issue-র উত্তরে ঢুকে না পড়ে
+os.environ.setdefault("OPENHANDS_SUPPRESS_BANNER", "1")
+logging.getLogger("openhands").setLevel(logging.WARNING)
+logging.getLogger("litellm").setLevel(logging.WARNING)
 
 DEFAULT_URL = "https://app.all-hands.dev"
 # 🖐️ ওদের ফ্রি টিমে শুধু এই মডেলগুলো চলে (plus লাগালে "team not allowed to access model" আসে)
