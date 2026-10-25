@@ -1,5 +1,5 @@
-# 🔌 মেশ চ্যাট সার্ভার — Cloudflare Worker সেটিংস
-# গোপন তথ্য wrangler.toml-এ নয় → `wrangler secret put ...` দিয়ে বসান
+# 🔌 এজেন্ট টিম — Cloudflare Worker সেটিংস
+# গোপন তথ্য এখানে নয় → `wrangler secret put ...`
 
 name = "mesh-chat"
 main = "index.js"
@@ -11,7 +11,8 @@ MESH_ISSUE = "3"
 ALLOWED_ORIGIN = "*"
 
 # 🔑 একবার করে চালান (টার্মিনালে):
-#   npx wrangler secret put GITHUB_TOKEN
-#   npx wrangler secret put APP_PASSCODE
+#   npx wrangler secret put GITHUB_TOKEN    # fine-grained PAT, Issues: Read & Write
+#   npx wrangler secret put APP_TOKEN       # অ্যাপের সেটিংসে যে টোকেন বসাবেন
 # তারপর:
 #   npx wrangler deploy
+

@@ -1,13 +1,14 @@
-# 📱 মেশ চ্যাট — iPhone-এ অ্যাপের মতো চ্যাট
+# 📱 এজেন্ট টিম — iPhone-এ অ্যাপের মতো চ্যাট
 
-ChatGPT-স্টাইল একটা চ্যাট অ্যাপ। ফোনেই জমা থাকে, ইন্টারনেট ছাড়াও খোলে,
-আর চাইলে আসল এজেন্টদের (OpenCode / Claude / Hermes) সাথে জোড়া যায়।
+**একটা ফাইলের PWA** (`docs/app/index.html`) — ChatGPT-স্টাইল চ্যাট, ভেতরে
+ম্যানেজার/রিসার্চার/কোডার/ডিজাইনার/টেস্টার/রাইটার। ডেমো মোডে সার্ভার ছাড়াই চলে,
+আর Worker দিলে আসল এজেন্টরা (OpenCode / Claude / Hermes) উত্তর দেয়।
 
 | কী | কোথায় |
 |---|---|
-| অ্যাপের কোড | `docs/app/` (vanilla HTML/CSS/JS, কোনো ফ্রেমওয়ার্ক নেই) |
-| সার্ভার (ঐচ্ছিক) | `worker/` (Cloudflare Worker) |
-| অটো টেস্ট | `tests/test_pwa.py`, `tests/js/`, `docs/app/tests/` |
+| অ্যাপের কোড | `docs/app/index.html` (vanilla HTML/CSS/JS, একটাই ফাইল) |
+| সার্ভার (ঐচ্ছিক) | `worker/` (Cloudflare Worker, চুক্তি মেনে) |
+| অটো টেস্ট | `tests/test_pwa.py`, `tests/js/` |
 
 ---
 
@@ -42,27 +43,37 @@ python3 -m http.server 8080 --directory docs/app
 
 ```bash
 cd worker
-npx wrangler deploy           # প্রথমবার লগইন চাইবে
-npx wrangler secret put GITHUB_TOKEN   # fine-grained PAT, শুধু Issues: Read & Write
-npx wrangler secret put APP_PASSCODE   # নিজের একটা পাসকোড
+npx wrangler deploy                     # প্রথমবার লগইন চাইবে
+npx wrangler secret put GITHUB_TOKEN    # fine-grained PAT, শুধু Issues: Read & Write
+npx wrangler secret put APP_TOKEN       # অ্যাপে যে টোকেন বসাবেন
 ```
 
 `wrangler.toml`-এ `MESH_REPO` আর `MESH_ISSUE` বসিয়ে দিন (হলঘর Issue নম্বর)।
 
 ### অ্যাপে বসান
 
-সেটিংস → **সার্ভার ঠিকানা** = `https://mesh-chat.<আপনার-নাম>.workers.dev`
-→ **পাসকোড** = যেটা দিয়েছেন → **সেভ করুন**।
-উপরের ব্যাজ 🟡 → 🟢 হয়ে গেলে লাইভ।
+সেটিংস (⋯) → **সার্ভার** = `https://mesh-chat.<আপনার-নাম>.workers.dev`
+→ **টোকেন** = `APP_TOKEN` → **কানেকশন টেস্ট**।
+উপরের ব্যাজ 🟡 → 🟢 হয়ে গেলে লাইভ (ডেমো সুইচ নিজেই বন্ধ হবে)।
+
+### চুক্তি (সংক্ষেপে)
+
+| মেথড | পাথ | কাজ |
+|---|---|---|
+| GET | `/api/health` | ২০০ দিলেই সংযুক্ত |
+| GET | `/api/agents` | এজেন্টের নাম/রোল/ইমোজি/রঙ |
+| POST | `/api/upload` | ফাইল (এখন শুধু নাম-টাইপ ফেরে, ফাইল জমা হয় না) |
+| POST | `/api/chat` | SSE স্ট্রিম: status · thinking · tool · tool_result · delta · final · typing · agent_message · error |
 
 ### ভেতরে কী ঘটে
 
 1. অ্যাপ → Worker → Issue-এ comment: `@mesh আপনার কথা`
 2. GitHub Actions মেশ চালায় → এজেন্টরা উত্তর দেয়
-3. উত্তরগুলো comment হয়ে ফিরে আসে → অ্যাপ ২.৫ সেকেন্ড পর পর দেখে নেয়
-   (সাধারণত ১–২ মিনিট লাগে)
+3. Worker ৩ সেকেন্ড পর পর comment দেখে, পেলেই স্ট্রিম করে অ্যাপে পাঠায়
+   (সর্বোচ্চ ~৯০ সেকেন্ড অপেক্ষা; তার বেশি লাগলে Issue-এ গিয়ে উত্তর দেখা যাবে)
 
-> 💡 Issue comment থেকে ডাকা হলে মেশ **group** মোডে চলে — সব এজেন্ট একসাথে উত্তর দেয়।
+> 💡 Issue comment থেকে ডাকা হলে মেশ **group** মোডে চলে। Worker সেটাকেই
+> এজেন্ট মোডে সাজিয়ে এক উত্তর বানায়, গ্রুপ মোডে প্রত্যেকের আলাদা বাবল দেয়।
 
 ---
 
@@ -82,7 +93,6 @@ npx wrangler secret put APP_PASSCODE   # নিজের একটা পাস�
 
 ```bash
 python3 -m unittest discover -s tests        # সব (Python + Node)
-node tests/js/worker_check.mjs               # শুধু Worker
-cd docs/app && node --test tests/md.test.mjs  # শুধু মার্কডাউন
+node tests/js/worker_check.mjs               # শুধু Worker (নকল GitHub দিয়ে)
 npm i --no-save jsdom && node tests/js/dom_check.mjs   # আসল DOM পরীক্ষা
 ```
