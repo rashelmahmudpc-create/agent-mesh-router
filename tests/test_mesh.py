@@ -42,8 +42,16 @@ class FakeRunner:
         return [c[0][0] for c in self.calls]
 
 
-def make_router(runner=None, tmp=None, **kwargs):
+def all_enabled_config() -> MeshConfig:
+    """টেস্টের জন্য সব এজেন্ট চালু — আসল ডিফল্ট আলাদা টেস্টে যাচাই হয়।"""
     config = MeshConfig.load()
+    for agent in config.agents:
+        agent.enabled = True
+    return config
+
+
+def make_router(runner=None, tmp=None, config=None, **kwargs):
+    config = config or all_enabled_config()
     store = Store(Path(tmp or tempfile.mkdtemp()) / "transcript.jsonl")
     return Router(config, runner=runner or FakeRunner(), store=store, workdir=".", **kwargs)
 
@@ -61,7 +69,7 @@ class TextUtilTest(unittest.TestCase):
 class ConfigTest(unittest.TestCase):
     def test_team_loaded(self):
         config = MeshConfig.load()
-        names = config.names()
+        names = [a.name for a in config.agents]
         for expected in ("opencode", "cline", "claude", "hermes", "openhands"):
             self.assertIn(expected, names)
 
@@ -71,7 +79,7 @@ class ConfigTest(unittest.TestCase):
         self.assertTrue(hermes.has_role("worker"))
 
     def test_openhands_not_in_group_chat(self):
-        config = MeshConfig.load()
+        config = all_enabled_config()
         self.assertNotIn("openhands", [a.name for a in config.chat_agents()])
 
 
@@ -444,3 +452,44 @@ class WorkflowFileTest(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
         self.assertIn("author_association", text)
         self.assertIn("OWNER", text)
+
+
+class EmptyReplyTest(unittest.TestCase):
+    def test_exit_zero_with_empty_output_is_failure(self):
+        spec = AgentSpec(name="claude", command=["claude", "-p", "{message}"])
+        adapter = CliAdapter(spec, runner=lambda c, e, w, t: (0, "   ", ""))
+        reply = adapter.send("হাই")
+        self.assertFalse(reply.ok)
+        self.assertTrue(reply.meta.get("empty"))
+        self.assertIn("খালি", reply.text)
+
+
+class CommandEnvTest(unittest.TestCase):
+    def test_command_supports_default_model(self):
+        spec = AgentSpec(
+            name="opencode",
+            command=["opencode", "run", "--model", "$OPENCODE_MODEL:-opencode/deepseek-v4.1-flash-free", "{message}"],
+        )
+        adapter = CliAdapter(spec, dry_run=True)
+        self.assertIn("opencode/deepseek-v4.1-flash-free", adapter._cmd("হাই"))
+
+        custom = CliAdapter(spec, dry_run=True, environ={"OPENCODE_MODEL": "my/model"})
+        self.assertIn("my/model", custom._cmd("হাই"))
+
+    def test_only_two_agents_active_by_default(self):
+        config = MeshConfig.load()
+        active = [a.name for a in config.enabled()]
+        self.assertEqual(sorted(active), ["claude", "opencode"])
+
+
+class DoctorHonestyTest(unittest.TestCase):
+    def test_disabled_agents_do_not_block(self):
+        from mesh.doctor import run_doctor
+
+        checks = run_doctor(
+            MeshConfig.load(), environ={"GH_TOKEN": "x"}, which=lambda n: "/bin/" + n,
+            store_path=Path(tempfile.mkdtemp()) / "t.jsonl",
+        )
+        # শুধু key না থাকায় ব্যর্থ; বন্ধ এজেন্টগুলো শুধু সতর্কতা
+        fails = [c.item for c in checks if c.status == "fail"]
+        self.assertEqual(fails, ["claude keys"])

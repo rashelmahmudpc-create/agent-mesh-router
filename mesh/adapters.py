@@ -62,10 +62,11 @@ class CliAdapter:
         self.reply_limit = reply_limit
 
     def _cmd(self, message: str) -> list[str]:
-        return [
-            part.replace("{message}", message).replace("{workdir}", self.workdir)
-            for part in self.spec.command
-        ]
+        out = []
+        for part in self.spec.command:
+            part = expand_env_value(part, self.environ) if part.startswith("$") else part
+            out.append(part.replace("{message}", message).replace("{workdir}", self.workdir))
+        return out
 
     def _base_env(self) -> dict[str, str]:
         env = dict(self.environ)
@@ -89,8 +90,17 @@ class CliAdapter:
             if var:
                 env[re.sub(r"_\d+$", "", var)] = value
             code, out, err = self.runner(cmd, env, self.workdir, self.spec.timeout_sec)
-            if code == 0:
+            if code == 0 and (out or "").strip():
                 return Reply(self.spec.name, self.spec.display(), True, clip(out, self.reply_limit), {"key": var or None})
+            if code == 0:
+                # exit 0 কিন্তু কিছু বলেনি — এটাকে সফল বলা যায় না
+                return Reply(
+                    self.spec.name,
+                    self.spec.display(),
+                    False,
+                    "❌ এজেন্ট চালু হলো কিন্তু কোনো উত্তর দিল না (খালি আউটপুট)। key/মডেল ঠিক আছে কি না দেখুন।",
+                    {"code": code, "empty": True},
+                )
             last = Reply(self.spec.name, self.spec.display(), False, clip(err or out, self.reply_limit), {"code": code})
             if not looks_like_quota_problem(out, err):
                 break  # এটা key এর সমস্যা নয় — অন্য key দিয়ে লাভ নেই

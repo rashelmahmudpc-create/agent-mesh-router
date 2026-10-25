@@ -45,6 +45,8 @@ jobs:
         && !contains(github.event.comment.body, '<!-- mesh:'))
     runs-on: ubuntu-latest
     timeout-minutes: 350
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -67,6 +69,27 @@ jobs:
           # ☤ Hermes: অফিশিয়াল ডক (hermes-agent.nousresearch.com/docs) থেকে
           # ইনস্টল কমান্ড দেখে নিচে বসান, তারপর কমেন্ট খুলুন:
           # curl -fsSL <official-install-url> | sh || true
+
+      - name: Secret check (মান ছাপে না — শুধু আছে/নেই)
+        continue-on-error: true
+        env:
+          K1: ${{ secrets.OPENROUTER_API_KEY }}
+          K2: ${{ secrets.OPENROUTER_API_KEY_2 }}
+          K3: ${{ secrets.GEMINI_API_KEY }}
+          K4: ${{ secrets.XAI_API_KEY }}
+        run: |
+          {
+            echo "## 🔑 Secret যাচাই"
+            echo ""
+            echo "| নাম | আছে? |"
+            echo "|---|---|"
+            for pair in "OPENROUTER_API_KEY:$K1" "OPENROUTER_API_KEY_2:$K2" "GEMINI_API_KEY:$K3" "XAI_API_KEY:$K4"; do
+              name="${pair%%:*}"; val="${pair#*:}"
+              if [ -n "$val" ]; then echo "| \`$name\` | ✅ হ্যাঁ |"; else echo "| \`$name\` | ❌ নেই |"; fi
+            done
+            echo ""
+            echo "> এই টেবিল দেখেই বোঝা যায় Secret ঠিক নামে বসেছে কি না।"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Doctor (কে সাড়া দেবে?)
         continue-on-error: true
@@ -92,6 +115,7 @@ jobs:
           OPENROUTER_API_KEY_2: ${{ secrets.OPENROUTER_API_KEY_2 }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          OPENCODE_MODEL: ${{ vars.OPENCODE_MODEL }}
           MSG: ${{ github.event_name == 'workflow_dispatch' && inputs.message || github.event.comment.body }}
           MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'group' }}
           ISSUE: ${{ github.event.issue.number || '' }}
