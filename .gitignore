@@ -11,3 +11,5 @@ report.md
 .pytest_cache/
 free-model.txt
 keys.md
+
+openhands.txt

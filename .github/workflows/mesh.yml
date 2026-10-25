@@ -213,6 +213,25 @@ jobs:
             echo "free: (none)"
           fi
 
+      - name: Hermes শুধু আসল উত্তর দেবে (reasoning বক্স বন্ধ)
+        if: steps.guard.outputs.skip != 'true'
+        continue-on-error: true
+        # 🧠 reasoning বক্স খোলা থাকলে উত্তরটাই হারিয়ে যেত — বন্ধ করে দিই
+        run: |
+          if hermes config set display.show_reasoning false >/dev/null 2>&1; then
+            echo "✅ Hermes reasoning display বন্ধ"
+          else
+            CFG="$HOME/.hermes/config.yaml"
+            mkdir -p "$HOME/.hermes"; touch "$CFG"
+            if ! grep -q '^display:' "$CFG"; then
+              printf '\ndisplay:\n  show_reasoning: false\n' >> "$CFG"
+              echo "✅ config.yaml এ display.show_reasoning=false যোগ হলো"
+            else
+              echo "⚠️ hermes config set কাজ করল না, display ব্লক আগেই আছে"
+            fi
+          fi
+          hermes config get display.show_reasoning 2>/dev/null || true
+
       - name: Show team
         if: steps.guard.outputs.skip != 'true'
         continue-on-error: true
