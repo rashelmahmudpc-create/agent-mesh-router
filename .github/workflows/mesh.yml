@@ -158,8 +158,8 @@ jobs:
           if [ -n "$FIRST" ]; then
             [ -z "${CLAUDE_MODEL:-}" ] && echo "CLAUDE_MODEL=$FIRST" >> "$GITHUB_ENV"
             [ -z "${OPENCODE_FALLBACK_MODEL:-}" ] && echo "OPENCODE_FALLBACK_MODEL=$FIRST" >> "$GITHUB_ENV"
-            echo "✅ আজকের ফ্রি মডেল: $(tr '\n' ' ' < free-model.txt)" >> "$GITHUB_STEP_SUMMARY"
-            echo "free: $(tr '\n' ' ' < free-model.txt)"
+            echo "✅ আজকের ফ্রি মডেল: $(paste -sd' ' free-model.txt)" >> "$GITHUB_STEP_SUMMARY"
+            echo "free: $(paste -sd' ' free-model.txt)"
           else
             echo "⚠️ ফ্রি মডেল পাওয়া যায়নি — ডিফল্ট চেইন" >> "$GITHUB_STEP_SUMMARY"
             echo "free: (none)"
@@ -215,7 +215,7 @@ jobs:
             echo ""
             echo "- trigger: \`${{ github.event_name }}\` · status: \`${{ job.status }}\`"
             echo "- run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            echo "- free model: \`$(head -3 free-model.txt 2>/dev/null | tr '\\n' ' ' || echo '(none)')\`"
+            echo "- free model: \`$(head -3 free-model.txt 2>/dev/null | paste -sd' ' - || echo '(none)')\`"
             echo ""
             echo "<details><summary>🩺 ডক্টর</summary>"
             echo ""
