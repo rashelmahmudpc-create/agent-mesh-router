@@ -231,6 +231,11 @@ class AutoDeployTest(unittest.TestCase):
         self.assertIn("issues: write", self.wf)
         self.assertIn("gh issue comment", self.wf)
 
+    def test_global_api_key_fallback(self):
+        """Global API Key (X-Auth-Key + email) থাকলেও চলবে।"""
+        self.assertIn("X-Auth-Key", self.wf)
+        self.assertIn("CF_EMAIL", self.wf)
+
     def test_any_common_secret_name_works(self):
         for name in ("CF_API_TOKEN", "CLOUDFLARE_API_KEY", "CLOUDFLARE_API_TOKEN", "CF_API_KEY"):
             self.assertIn(f"secrets.{name}", self.wf, f"{name} চেনে না")

@@ -53,6 +53,9 @@ jobs:
           A1: ${{ secrets.CF_ACCOUNT_ID }}
           A2: ${{ secrets.ADMISSIONSKY_CLOUDFLARE_ACCOUNT_ID }}
           A3: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          E1: ${{ secrets.CF_EMAIL }}
+          E2: ${{ secrets.CLOUDFLARE_EMAIL }}
+          E3: ${{ secrets.ADMISSIONSKY_CLOUDFLARE_EMAIL }}
         run: |
           set -uo pipefail
           TOK=""; NAME=""
@@ -68,6 +71,7 @@ jobs:
             if [ -n "$v" ]; then TOK="$v"; NAME="$n"; break; fi
           done
           ACC="${A1:-}${A2:-}${A3:-}"
+          EMAIL="${E1:-}${E2:-}${E3:-}"
           if [ -z "$TOK" ]; then
             echo "found=false" >> "$GITHUB_OUTPUT"
             echo "⏭️ কোনো Cloudflare টোকেন নেই — ডিপ্লয় বাদ"
@@ -78,6 +82,7 @@ jobs:
             echo "found=true"
             echo "name=$NAME"
             echo "account=$ACC"
+            echo "email=$EMAIL"
             printf 'token=%s\n' "$TOK"
           } >> "$GITHUB_OUTPUT"
           echo "✅ টোকেন পাওয়া গেছে: $NAME"
@@ -88,19 +93,28 @@ jobs:
         if: steps.token.outputs.found == 'true'
         env:
           TOKEN: ${{ steps.token.outputs.token }}
+          EMAIL: ${{ steps.token.outputs.email }}
         run: |
           set -uo pipefail
           python3 - <<'PY' > report.txt 2>&1 || true
           import json, os, urllib.request, urllib.error
 
           token = os.environ.get("TOKEN", "").strip()
+          email = os.environ.get("EMAIL", "").strip()
           BASE = "https://api.cloudflare.com/client/v4"
+          MODE = "bearer"
 
-          def call(path):
-              req = urllib.request.Request(BASE + path, headers={
-                  "Authorization": f"Bearer {token}",
-                  "Content-Type": "application/json",
-              })
+          def headers_for(mode):
+              h = {"Content-Type": "application/json"}
+              if mode == "global":
+                  h["X-Auth-Email"] = email
+                  h["X-Auth-Key"] = token
+              else:
+                  h["Authorization"] = f"Bearer {token}"
+              return h
+
+          def call(path, mode=None):
+              req = urllib.request.Request(BASE + path, headers=headers_for(mode or MODE))
               try:
                   with urllib.request.urlopen(req, timeout=25) as r:
                       return r.status, json.loads(r.read().decode() or "{}")
@@ -115,13 +129,25 @@ jobs:
 
           status, data = call("/user/tokens/verify")
           ok = bool(data.get("success")) and (data.get("result") or {}).get("status") == "active"
-          print(f"VERIFY ok={ok} status={status} active={(data.get('result') or {}).get('status','-')}")
+          print(f"VERIFY mode=bearer ok={ok} status={status}")
           for err in (data.get("errors") or [])[:2]:
               print(f"  error: {err.get('message','')[:160]}")
 
+          if not ok and email:
+              MODE = "global"
+              print("→ Bearer কাজ করল না; Global API Key (X-Auth-Key + email) দিয়ে চেষ্টা…")
+              status, data = call("/accounts")
+              ok = bool(data.get("success")) and bool(data.get("result"))
+              print(f"VERIFY mode=global ok={ok} status={status}")
+              for err in (data.get("errors") or [])[:2]:
+                  print(f"  error: {err.get('message','')[:160]}")
+          elif not ok:
+              print("→ Bearer কাজ করল না, আর email নেই — তাই Global Key পথ চেষ্টা করা যায়নি")
+              print("  সমাধান: Workers permission সহ নতুন token, অথবা CF_EMAIL secret যোগ করুন")
+
           accounts = []
           if ok:
-              status, data = call("/accounts")
+              status, data = call("/accounts", MODE)
               accounts = data.get("result") or []
               print(f"ACCOUNTS ok={bool(data.get('success'))} count={len(accounts)}")
               for acc in accounts[:5]:
@@ -200,6 +226,8 @@ jobs:
       # ---------- 🚀 ডিপ্লয় ----------
       - name: Deploy → Cloudflare
         if: steps.account.outputs.id != ''
+        env:
+          CF_API_EMAIL: ${{ steps.token.outputs.email }}
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ steps.token.outputs.token }}
