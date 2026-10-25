@@ -189,7 +189,7 @@
         "মনে",
         "পরিকল্পনা"
       ],
-      "notes": "শুধু OpenRouter provider (অন্য provider-এ আলাদা key লাগে — সেটা যোগ করা হয়নি)",
+      "notes": "শুধু OpenRouter + শুধু ফ্রি মডেল (FREE_M1/M2)। পেইড মডেল দিলে 402 'never purchased credits' আসে",
       "fallback_commands": [
         [
           "hermes",
@@ -212,20 +212,6 @@
           "{message}",
           "-m",
           "$FREE_M2:-openrouter/free",
-          "--provider",
-          "openrouter",
-          "-Q",
-          "--yolo",
-          "--max-turns",
-          "3"
-        ],
-        [
-          "hermes",
-          "chat",
-          "-q",
-          "{message}",
-          "-m",
-          "z-ai/glm-5.2",
           "--provider",
           "openrouter",
           "-Q",
