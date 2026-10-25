@@ -37,24 +37,32 @@
         "বাগ",
         "ঠিক"
       ],
-      "notes": "ফ্রি মডেল পিন করা হয়েছে (opencode/deepseek-v4.1-flash-free)। ভিন্ন মডেল চাইলে OPENCODE_MODEL ভেরিয়েবল দিন — নইলে OpenCode পেইড ডিফল্ট মডেলে গিয়ে 'requires more credits' দেয়"
+      "notes": "প্রথমে OpenCode এর ফ্রি মডেল; 'usage limit' এলে OpenRouter দিয়ে আবার (fallback, এখনো যাচাই হয়নি)",
+      "fallback_commands": [
+        [
+          "opencode",
+          "run",
+          "--auto",
+          "--model",
+          "$OPENCODE_FALLBACK_MODEL:-openrouter/openrouter/free",
+          "{message}"
+        ]
+      ]
     },
     {
       "name": "cline",
       "label": "🟦 Cline",
       "kind": "cli",
-      "enabled": false,
+      "enabled": true,
       "roles": [
         "worker",
         "chat"
       ],
       "command": [
         "cline",
-        "-y",
         "-P",
         "openrouter",
-        "-k",
-        "$OPENROUTER_API_KEY",
+        "-y",
         "{message}"
       ],
       "timeout_sec": 900,
@@ -67,7 +75,10 @@
         "রিভিউ",
         "ডিজাইন"
       ],
-      "notes": "⚠️ বন্ধ: Cline CLI নিজের অ্যাকাউন্টে লগইন চায় ('Unauthorized')। OpenRouter key দিয়ে চালাতে enabled=true করুন (কমান্ডে -P openrouter -k $OPENROUTER_API_KEY দেওয়া আছে)"
+      "notes": "OpenRouter প্রোভাইডার দিয়ে চালানোর চেষ্টা (আগের 'Unauthorized' এড়াতে)",
+      "env": {
+        "OPENROUTER_API_KEY": "$OPENROUTER_API_KEY"
+      }
     },
     {
       "name": "claude",

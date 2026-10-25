@@ -18,6 +18,7 @@ class AgentSpec:
     enabled: bool = True
     roles: list[str] = field(default_factory=lambda: ["worker", "chat"])
     command: list[str] = field(default_factory=list)
+    fallback_commands: list[list[str]] = field(default_factory=list)
     timeout_sec: int = 900
     env: dict[str, str] = field(default_factory=dict)
     keys: list[str] = field(default_factory=list)
