@@ -96,3 +96,13 @@ python3 -m unittest discover -s tests        # সব (Python + Node)
 node tests/js/worker_check.mjs               # শুধু Worker (নকল GitHub দিয়ে)
 npm i --no-save jsdom && node tests/js/dom_check.mjs   # আসল DOM পরীক্ষা
 ```
+
+## 🔧 সমস্যা হলে
+
+| উপসর্গ | কারণ | সমাধান |
+|---|---|---|
+| ☰ চাপলে পর্দা অন্ধকার হয় কিন্তু মেনু আসে না | `#sidebar`/`#settings`-এ দেওয়া `transform` CSS specificity-তে `.drawer.on`-কে হারিয়ে দেয় | id+class দিয়ে লিখতে হবে: `#sidebar.on,#settings.on{transform:translateX(0)}` (ঠিক করা হয়েছে) |
+| মেনু খুললে পেছনের লেখা সরে যায় | ওভারলে/স্ক্রিম কাজ করছে না | `#scrim.on` আর ড্রয়ারের `z-index:21 > 20` দেখুন |
+
+> ⚠️ ড্রয়ার ঠিক আছে কি না, শুধু `class="on"` দেখে বোঝা যায় না — `getComputedStyle`-এ
+> `transform` সত্যিই `translateX(0)` হয়েছে কি না দেখতে হবে। `tests/js/dom_check.mjs` এখন সেটাই মাপে।

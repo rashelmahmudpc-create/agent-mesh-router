@@ -184,6 +184,9 @@ body.kb #composer{padding-bottom:8px}
 #sidebar{left:0;transform:translateX(-105%);border-right:1px solid var(--line)}
 #settings{right:0;width:min(90vw,380px);transform:translateX(105%);border-left:1px solid var(--line)}
 .drawer.on{transform:none}
+/* নোট: #sidebar/#settings-এ transform দেওয়া আছে (specificity: id > class),
+   তাই শুধু .drawer.on লিখলে ড্রয়ার আর ভেতরে আসে না — id+class দিয়ে লিখতে হয় */
+#sidebar.on,#settings.on{transform:translateX(0)}
 .dh{display:flex;align-items:center;gap:8px;padding:12px 14px 8px;font-weight:700;font-size:1.15rem}
 .newbtn{display:flex;align-items:center;gap:10px;margin:6px 14px 10px;padding:13px 16px;border-radius:16px;background:var(--accent);color:#fff;font-weight:600;font-size:16px}
 .search{display:flex;align-items:center;gap:8px;margin:0 14px 8px;padding:0 12px;border-radius:14px;background:var(--surface);color:var(--muted)}
