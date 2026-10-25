@@ -1,0 +1,4 @@
+{
+  "apiBase": "https://mesh-chat.admissionhub.workers.dev",
+  "note": "worker.yml নিজেই লিখেছে — অ্যাপ এখান থেকেই সার্ভারের ঠিকানা নেয়"
+}
