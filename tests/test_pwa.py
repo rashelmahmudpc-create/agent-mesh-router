@@ -227,6 +227,10 @@ class AutoDeployTest(unittest.TestCase):
         self.assertIn("/user/tokens/verify", self.wf)   # আসলেই কাজ করে কি না
         self.assertIn("steps.verify.outputs.ok", self.wf)
 
+    def test_verification_report_reaches_the_readable_issue(self):
+        self.assertIn("issues: write", self.wf)
+        self.assertIn("gh issue comment", self.wf)
+
     def test_any_common_secret_name_works(self):
         for name in ("CF_API_TOKEN", "CLOUDFLARE_API_KEY", "CLOUDFLARE_API_TOKEN", "CF_API_KEY"):
             self.assertIn(f"secrets.{name}", self.wf, f"{name} চেনে না")
