@@ -47,6 +47,24 @@ python3 -m mesh.cli "হাই" --mode group
 
 ---
 
+## 📱 মেশ চ্যাট — iPhone-এ অ্যাপের মতো (নতুন)
+
+ChatGPT-স্টাইল একটা চ্যাট অ্যাপ — হোম স্ক্রিনে বসিয়ে সাধারণ অ্যাপের মতো ব্যবহার করা যায়।
+
+| ধাপ | কী করবেন |
+|---|---|
+| ১ | `docs/app/` ফোল্ডারটাই অ্যাপ (vanilla HTML/CSS/JS — কোনো ফ্রেমওয়ার্ক নেই) |
+| ২ | Settings → Pages → Source: **Deploy from a branch** → `main` + folder **/docs** |
+| ৩ | iPhone-এ Safari → **Share → Add to Home Screen** |
+| ৪ | (ঐচ্ছিক) `worker/` ডিপ্লয় করে সেটিংসে ঠিকানা দিলে আসল এজেন্টরা উত্তর দেয় |
+
+> 🟡 কিছু না করলেও অ্যাপ চলবে — **ডেমো মোড**, ইন্টারনেট লাগে না।
+> 🟢 **লাইভ মোড**-এ কথা যায় GitHub Issue-এ, এজেন্টরা উত্তর দেয়, অ্যাপ সেটা তুলে আনে।
+
+বিস্তারিত (বাংলা): **[`docs/pwa-bn.md`](docs/pwa-bn.md)**
+
+---
+
 ## 🧩 দুইটা মোড
 
 | মোড | কী হয় | কখন |
@@ -197,8 +215,11 @@ mesh/adapters.py        # এজেন্টের সাথে কথা বল
 mesh/keys.py            # key ঘোরানো
 mesh/chat.py            # চ্যাটের লগ (.mesh/transcript.jsonl)
 mesh/doctor.py          # 🩺 স্বাস্থ্য পরীক্ষা
-mesh/models.py           # 🆓 প্রতি রানে ফ্রি মডেল খুঁজে নেয়
-tests/                  # ৭৭টা পরীক্ষা — key ছাড়াই চলে
+mesh/models.py          # 🆓 প্রতি রানে ফ্রি মডেল খুঁজে নেয়
+docs/app/               # 📱 চ্যাট অ্যাপ (PWA, iPhone-এ Add to Home Screen)
+worker/                 # 🔌 অ্যাপের সার্ভার (Cloudflare Worker, ঐচ্ছিক)
+tools/                  # 🎨 আইকন বানানোর স্ক্রিপ্ট (PIL ছাড়াই)
+tests/                  # Python + Node পরীক্ষা — key ছাড়াই চলে
 docs/handoffs/          # 📮 কাজের হ্যান্ডঅফ
 .github/workflows/      # ব্রেইন যেখানে চলে (mesh.yml) + পরীক্ষা (ci.yml)
 ```
@@ -206,5 +227,7 @@ docs/handoffs/          # 📮 কাজের হ্যান্ডঅফ
 ## ✅ পরীক্ষা
 
 ```bash
-python3 -m unittest discover -s tests -v
+python3 -m unittest discover -s tests -v     # সব (Python ৭৯টা + Node অংশ)
+node tests/js/worker_check.mjs               # শুধু Worker
+cd docs/app && node --test tests/md.test.mjs  # শুধু মার্কডাউন
 ```

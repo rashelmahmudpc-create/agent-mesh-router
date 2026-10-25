@@ -1,0 +1,17 @@
+# 🔌 মেশ চ্যাট সার্ভার — Cloudflare Worker সেটিংস
+# গোপন তথ্য wrangler.toml-এ নয় → `wrangler secret put ...` দিয়ে বসান
+
+name = "mesh-chat"
+main = "index.js"
+compatibility_date = "2026-01-01"
+
+[vars]
+MESH_REPO = "rashelmahmudpc-create/agent-mesh-router"
+MESH_ISSUE = "3"
+ALLOWED_ORIGIN = "*"
+
+# 🔑 একবার করে চালান (টার্মিনালে):
+#   npx wrangler secret put GITHUB_TOKEN
+#   npx wrangler secret put APP_PASSCODE
+# তারপর:
+#   npx wrangler deploy
