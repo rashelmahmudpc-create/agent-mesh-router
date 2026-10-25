@@ -214,9 +214,11 @@ class AutoDeployTest(unittest.TestCase):
         self.wf = (ROOT / ".github" / "workflows" / "worker.yml").read_text(encoding="utf-8")
         self.app = (APP / "index.html").read_text(encoding="utf-8")
 
-    def test_only_two_secrets_needed(self):
+    def test_only_one_secret_is_mandatory(self):
+        """শুধু CF_API_TOKEN — Account ID নিজেই খুঁজে নেয়।"""
         self.assertIn("CF_API_TOKEN", self.wf)
-        self.assertIn("CF_ACCOUNT_ID", self.wf)
+        self.assertIn("client/v4/accounts", self.wf)  # account id discovery
+        self.assertIn("steps.account.outputs.id", self.wf)
         # secret না থাকলে চুপচাপ বাদ
         self.assertIn("skip=true", self.wf)
 
