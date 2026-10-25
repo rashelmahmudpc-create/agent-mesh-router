@@ -30,6 +30,21 @@ def _supports_tools(model: dict) -> bool:
     return "tools" in params
 
 
+def pick_free_models(models: list[dict], limit: int = 3, min_context: int = MIN_CONTEXT) -> list[str]:
+    """সবচেয়ে বড় context-এর দিক থেকে সেরা কয়েকটা ফ্রি টুল-সক্ষম মডেল।"""
+    candidates = [
+        m
+        for m in models
+        if isinstance(m, dict)
+        and m.get("id")
+        and _is_free(m)
+        and _supports_tools(m)
+        and int(m.get("context_length") or 0) >= min_context
+    ]
+    candidates.sort(key=lambda m: int(m.get("context_length") or 0), reverse=True)
+    return [m["id"] for m in candidates[:limit]]
+
+
 def pick_free_model(models: list[dict], min_context: int = MIN_CONTEXT) -> str | None:
     """তালিকা থেকে সবচেয়ে বড় context-এর ফ্রি টুল-সক্ষম মডেলের id।"""
     candidates = [
@@ -60,3 +75,7 @@ def fetch_models(timeout: int = 30) -> list[dict]:
 
 def discover(timeout: int = 30) -> str | None:
     return pick_free_model(fetch_models(timeout=timeout))
+
+
+def discover_many(limit: int = 3, timeout: int = 30) -> list[str]:
+    return pick_free_models(fetch_models(timeout=timeout), limit=limit)

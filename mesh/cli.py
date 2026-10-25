@@ -83,6 +83,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--free-model", action="store_true", help="এখন কোন মডেল সত্যিই ফ্রি — OpenRouter তালিকা থেকে বলে দাও"
     )
+    parser.add_argument(
+        "--free-model-list", type=int, default=0, metavar="N",
+        help="সেরা N টা ফ্রি মডেলের আইডি (প্রতি লাইনে একটা)",
+    )
     args = parser.parse_args(argv)
 
     config = MeshConfig.load(args.config)
@@ -95,6 +99,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         _print_list(config)
         return 0
+
+    if args.free_model_list:
+        from .models import discover_many
+
+        found = discover_many(limit=args.free_model_list)
+        if found:
+            print("\n".join(found))
+            return 0
+        print("⚠️ ফ্রি মডেল পাওয়া যায়নি", file=sys.stderr)
+        return 1
 
     if args.free_model:
         from .models import discover

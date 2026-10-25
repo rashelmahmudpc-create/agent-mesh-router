@@ -142,20 +142,27 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY" || true
 
-      - name: Pick a free model (প্রতিটা রানে তাজা তালিকা দেখে)
+      - name: Pick free models (প্রতিটা রানে তাজা তালিকা দেখে)
         id: freemodel
         if: steps.guard.outputs.skip != 'true'
         continue-on-error: true
         run: |
-          MODEL=$(python -m mesh.cli --free-model 2>/dev/null || true)
-          if [ -n "$MODEL" ]; then
-            echo "✅ আজকের ফ্রি মডেল: \`$MODEL\`" >> "$GITHUB_STEP_SUMMARY"
-            # ব্যবহারকারী নিজে Variable দিয়ে ঠিক করে না দিলে অটো-বাছাই ব্যবহার হবে
-            if [ -z "${HERMES_MODEL:-}" ]; then echo "HERMES_MODEL=$MODEL" >> "$GITHUB_ENV"; fi
-            if [ -z "${CLAUDE_MODEL:-}" ]; then echo "CLAUDE_MODEL=$MODEL" >> "$GITHUB_ENV"; fi
-            if [ -z "${OPENCODE_FALLBACK_MODEL:-}" ]; then echo "OPENCODE_FALLBACK_MODEL=$MODEL" >> "$GITHUB_ENV"; fi
+          python -m mesh.cli --free-model-list 3 > free-model.txt 2>/dev/null || true
+          i=1
+          while IFS= read -r m; do
+            [ -z "$m" ] && continue
+            echo "FREE_M$i=$m" >> "$GITHUB_ENV"
+            i=$((i+1))
+          done < free-model.txt
+          FIRST=$(head -1 free-model.txt 2>/dev/null || true)
+          if [ -n "$FIRST" ]; then
+            [ -z "${CLAUDE_MODEL:-}" ] && echo "CLAUDE_MODEL=$FIRST" >> "$GITHUB_ENV"
+            [ -z "${OPENCODE_FALLBACK_MODEL:-}" ] && echo "OPENCODE_FALLBACK_MODEL=$FIRST" >> "$GITHUB_ENV"
+            echo "✅ আজকের ফ্রি মডেল: $(tr '\n' ' ' < free-model.txt)" >> "$GITHUB_STEP_SUMMARY"
+            echo "free: $(tr '\n' ' ' < free-model.txt)"
           else
-            echo "⚠️ ফ্রি মডেল পাওয়া যায়নি — ডিফল্ট চেইন ব্যবহার হবে" >> "$GITHUB_STEP_SUMMARY"
+            echo "⚠️ ফ্রি মডেল পাওয়া যায়নি — ডিফল্ট চেইন" >> "$GITHUB_STEP_SUMMARY"
+            echo "free: (none)"
           fi
 
       - name: Show team
@@ -208,6 +215,7 @@ jobs:
             echo ""
             echo "- trigger: \`${{ github.event_name }}\` · status: \`${{ job.status }}\`"
             echo "- run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "- free model: \`$(head -3 free-model.txt 2>/dev/null | tr '\\n' ' ' || echo '(none)')\`"
             echo ""
             echo "<details><summary>🩺 ডক্টর</summary>"
             echo ""

@@ -44,7 +44,7 @@
           "run",
           "--auto",
           "--model",
-          "$OPENCODE_FALLBACK_MODEL:-openrouter/openrouter/free",
+          "$OPENCODE_FALLBACK_MODEL:-$FREE_M1",
           "{message}"
         ]
       ]
@@ -113,7 +113,7 @@
         "গুরুত্বপূর্ণ",
         "আর্কিটেকচার"
       ],
-      "notes": "যাচাই করা: `-p` কাজ করে, বাংলায় উত্তর দেয়। খালি উত্তর এলে fallback হিসেবে নির্দিষ্ট ফ্রি মডেল চেষ্টা করে",
+      "notes": "`-p` + `--output-format text`। ANTHROPIC_MODEL = $CLAUDE_MODEL:-openrouter/free; খালি উত্তর/লিমিট হলে FREE_M2, FREE_M3, শেষে openrouter/free",
       "fallback_commands": [
         [
           "claude",
@@ -122,7 +122,7 @@
           "--output-format",
           "text",
           "--model",
-          "minimax/minimax-m3:free"
+          "$FREE_M2:-openrouter/free"
         ],
         [
           "claude",
@@ -131,7 +131,7 @@
           "--output-format",
           "text",
           "--model",
-          "nvidia/nemotron-3-ultra-550b-a55b:free"
+          "$FREE_M3:-openrouter/free"
         ],
         [
           "claude",
@@ -140,7 +140,7 @@
           "--output-format",
           "text",
           "--model",
-          "qwen/qwen3.8-27b:free"
+          "openrouter/free"
         ]
       ]
     },
@@ -160,7 +160,7 @@
         "-q",
         "{message}",
         "-m",
-        "openrouter/free",
+        "$FREE_M1:-openrouter/free",
         "--provider",
         "openrouter",
         "-Q",
@@ -180,7 +180,7 @@
         "মনে",
         "পরিকল্পনা"
       ],
-      "notes": "ফ্রি মডেল চেইন: openrouter/free → minimax/minimax-m3:free → nvidia/nemotron-3-ultra-550b-a55b:free → qwen/qwen3.8-27b:free (OpenRouter এ ফ্রি তালিকা বদলায়, তাই একাধিক ধাপ)",
+      "notes": "মডেল প্রতিটা রানে অটো-বাছাই হয় (FREE_M1..M3 — OpenRouter এর তাজা ফ্রি তালিকা থেকে)। সব ব্যর্থ হলে শেষে openrouter/free",
       "fallback_commands": [
         [
           "hermes",
@@ -188,7 +188,7 @@
           "-q",
           "{message}",
           "-m",
-          "minimax/minimax-m3:free",
+          "$FREE_M2:-openrouter/free",
           "--provider",
           "openrouter",
           "-Q",
@@ -202,7 +202,7 @@
           "-q",
           "{message}",
           "-m",
-          "nvidia/nemotron-3-ultra-550b-a55b:free",
+          "$FREE_M3:-openrouter/free",
           "--provider",
           "openrouter",
           "-Q",
@@ -216,7 +216,7 @@
           "-q",
           "{message}",
           "-m",
-          "qwen/qwen3.8-27b:free",
+          "openrouter/free",
           "--provider",
           "openrouter",
           "-Q",
