@@ -178,9 +178,9 @@ body.kb #composer{padding-bottom:8px}
 .pop button:active{background:var(--surface)}
 /* 🎯 কে উত্তর দেবে — এক/একাধিক টিক দেওয়া যায় */
 .pickbar{display:flex;align-items:center;gap:6px;margin:0 0 6px 6px}
-.pickbtn{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13.5px;color:var(--muted);max-width:76vw}
-.pickbtn b{color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pickbtn.on{border-color:var(--accent);color:var(--text)}
+.pickbtn{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13.5px;color:var(--accent)}
+.pickbtn b{color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:44vw}
+.pickbtn.on{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--surface))}
 .pickbtn .ar{font-size:11px}
 #agentPick{bottom:calc(100% + 8px);left:6px;min-width:250px;max-width:88vw;max-height:min(58vh,420px);overflow:auto;padding:8px}
 #agentPick .ph{padding:8px 12px 6px;font-size:12.5px;color:var(--muted)}
@@ -292,7 +292,7 @@ pre.contract{background:var(--code);border:1px solid var(--line);border-radius:1
       <div id="atts"></div>
       <div class="pickbar">
         <button class="pickbtn" id="pickBtn" aria-haspopup="true" aria-expanded="false">
-          <span data-ic="users" data-s="15"></span><b id="pickName">সবাই</b><span class="ar">▾</span>
+          <span data-ic="users" data-s="15"></span>কে উত্তর দেবে: <b id="pickName">সবাই</b><span class="ar">▾</span>
         </button>
       </div>
       <div class="pop" id="agentPick" hidden>
@@ -481,7 +481,7 @@ const REAL_AGENTS=[
  {id:'claude',name:'Claude Code',role:'প্ল্যান/কোড',emoji:'🟠',color:'#d97757'},
  {id:'hermes',name:'Hermes',role:'ম্যানেজার',emoji:'☤',color:'#8b5cf6'},
  {id:'openhands',name:'OpenHands',role:'অটোমেশন',emoji:'🖐️',color:'#f59e0b'}];
-const APP_V='2026-10-26.2'; // 🔖 সংস্করণ — সেটিংসে দেখা যায়
+const APP_V='2026-10-26.3'; // 🔖 সংস্করণ — সেটিংসে দেখা যায়
 const cfg=Object.assign({theme:'dark',accent:'#d97757',fs:17,name:'',server:'',token:'',demo:true,lang:'bn-BD',speak:true,mode:'agent',agents:[],ghRepo:'rashelmahmudpc-create/agent-mesh-router',ghIssue:'3',ghToken:'',fastMode:true,fastProvider:'groq',fastKey:'',fastModel:'',route:'auto'},lsGet('ax.cfg',{}));
 const S={chats:lsGet('ax.chats',[]),cur:null,busy:false,ac:null,atts:[],agents:DEMO_AGENTS,conn:'demo',stick:true,dict:null};
 const ELS=new WeakMap();
