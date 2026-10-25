@@ -261,4 +261,13 @@ class AutoDeployTest(unittest.TestCase):
 
     def test_app_reads_the_url_by_itself(self):
         self.assertIn("server.json", self.app)
-        self.assertIn("cfg.server||cfg.ghToken||cfg.fastKey", self.app)
+        # নিজে বেছে নিলে (github/fast) ছোঁবে না, নইলে Worker আগে
+        self.assertIn("cfg.route==='github'||cfg.route==='fast'", self.app)
+
+    def test_worker_wins_over_the_slow_github_path(self):
+        """স్క্রিনশটের বাগ: Worker থাকা সত্ত্বেও অ্যাপ GitHub-এর ১৫০s পথে যাচ্ছিল।"""
+        self.assertIn("const workerOn=", self.app)
+        self.assertIn("const isGh=()=>!workerOn()", self.app)
+        self.assertIn("const fastOn=()=>!workerOn()", self.app)
+        self.assertIn("routeName", self.app)
+        self.assertIn("কোন পথে কথা বলবে", self.app)
