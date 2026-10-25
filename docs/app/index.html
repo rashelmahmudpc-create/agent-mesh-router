@@ -769,7 +769,7 @@ async function netRun(req,onEv,sig){
 /* ---------- GitHub সরাসরি (Worker ছাড়া) ---------- */
 // Actions রান মাপা হয়েছে ৩–৯ মিনিট (কখনো বেশি) — তাই ১০ মিনিট ধরে অপেক্ষা করি
 // (টেস্টে ছোট করা যায়: cfg.ghPollMs / ghQuietMs / ghWaitMs)
-const GH_WAIT_MS=()=>Number(cfg.ghWaitMs)||600000,GH_POLL_MS=()=>Number(cfg.ghPollMs)||3000,GH_QUIET_MS=()=>Number(cfg.ghQuietMs)||12000;
+const GH_WAIT_MS=()=>Number(cfg.ghWaitMs)||600000,GH_POLL_MS=()=>Number(cfg.ghPollMs)||3000,GH_QUIET_MS=()=>Number(cfg.ghQuietMs)||20000;
 function ghAgent(body){
   const m=/<!--\s*mesh:([\w.-]+)\s*-->/.exec(body||'');
   const id=(m?m[1]:'mgr').toLowerCase();
