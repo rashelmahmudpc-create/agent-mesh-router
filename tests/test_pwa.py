@@ -205,3 +205,37 @@ class FastLaneTest(unittest.TestCase):
         self.assertIn("CF_API_TOKEN", wf)
         self.assertIn("skip=true", wf)  # secret না থাকলে চুপচাপ বাদ
         self.assertIn("wrangler-action", wf)
+
+
+class AutoDeployTest(unittest.TestCase):
+    """☁️ স্যার কিছু করবেন না — workflow নিজেই Cloudflare-এ ডিপ্লয় করবে।"""
+
+    def setUp(self):
+        self.wf = (ROOT / ".github" / "workflows" / "worker.yml").read_text(encoding="utf-8")
+        self.app = (APP / "index.html").read_text(encoding="utf-8")
+
+    def test_only_two_secrets_needed(self):
+        self.assertIn("CF_API_TOKEN", self.wf)
+        self.assertIn("CF_ACCOUNT_ID", self.wf)
+        # secret না থাকলে চুপচাপ বাদ
+        self.assertIn("skip=true", self.wf)
+
+    def test_provider_keys_are_pushed_to_the_worker(self):
+        for name in ("OPENROUTER_API_KEY", "GROQ_API_KEY", "GEMINI_API_KEY"):
+            self.assertIn(f"put {name}", self.wf, f"{name} Worker-এ বসে না")
+
+    def test_worker_url_is_written_for_the_app(self):
+        self.assertIn("workers/subdomain", self.wf)
+        self.assertIn("docs/app/server.json", self.wf)
+        self.assertIn("/api/health", self.wf)  # যাচাই
+        self.assertIn("contents: write", self.wf)  # কমিট করার অনুমতি
+
+    def test_app_reads_the_url_by_itself(self):
+        self.assertIn("server.json", self.app)
+        self.assertIn("cfg.server||cfg.ghToken||cfg.fastKey", self.app)  # নিজের সেটিং ছোঁবে না
+
+    def test_secrets_never_printed(self):
+        """key কখনো echo হয় না (public repo)।"""
+        self.assertNotIn('echo "$OPENROUTER_API_KEY"', self.wf)
+        self.assertNotIn('echo "$GROQ_API_KEY"', self.wf)
+        self.assertNotIn('echo "$GEMINI_API_KEY"', self.wf)
