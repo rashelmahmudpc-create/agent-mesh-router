@@ -244,6 +244,19 @@ jobs:
             echo "… অপেক্ষা ($i/5)"
             sleep 6
           done
+          # ⚡ আসল চ্যাট পরীক্ষা — কত সেকেন্ডে উত্তর, কতজন উত্তর দিল
+          START=$(date +%s)
+          curl -s -m 60 -X POST "$URL/api/chat" \
+            -H "content-type: application/json" \
+            -d '{"mode":"group","message":"এক লাইনে বলো: তুমি কাজ করছো কি না"}' > chat.txt || true
+          SECS=$(( $(date +%s) - START ))
+          JOBS=$(grep -o '"type":"agent_message"' chat.txt 2>/dev/null | wc -l | tr -d ' ')
+          echo "⚡ চ্যাট পরীক্ষা: ${SECS} সেকেন্ড, ${JOBS} ইভেন্ট"
+          {
+            echo "------ chat smoke test ------"
+            echo "seconds=$SECS events=$JOBS"
+            head -c 800 chat.txt 2>/dev/null || true
+          } >> report.txt || true
 
       - name: অ্যাপকে ঠিকানা জানাও (server.json)
         if: steps.url.outputs.found == 'true'
