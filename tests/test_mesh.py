@@ -533,6 +533,13 @@ class WorkflowFileTest(unittest.TestCase):
         self.assertIn("author_association", cond)
         self.assertIn("mesh-status", cond)
 
+    def test_auto_runs_post_answers_to_the_hall(self):
+        """ক্লিক ছাড়া চলা রানেও উত্তর যেন হলঘরে (Issue #3) পড়া যায়।"""
+        text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
+        block = text.split("- name: Route message")[1].split("- name:")[0]
+        self.assertIn("HALL=3", block)
+        self.assertIn("--issue", block)
+
     def test_only_trusted_people_can_trigger_from_issue_comment(self):
         text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
         self.assertIn("author_association", text)

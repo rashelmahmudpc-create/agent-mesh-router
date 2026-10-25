@@ -243,6 +243,11 @@ jobs:
           DRY: ${{ inputs.dry_run || false }}
         run: |
           set -uo pipefail
+          # 🏠 অটো-রান (push/schedule)-এও উত্তরগুলো হলঘর Issue #3-এ যাবে, যাতে স্যার দেখতে পান
+          HALL=3
+          if [ -z "${ISSUE:-}" ] && [ "${GITHUB_EVENT_NAME:-}" != "workflow_dispatch" ]; then
+            ISSUE="$HALL"
+          fi
           args=(--mode "$MODE")
           if [ -n "$ISSUE" ]; then args+=(--issue "$ISSUE"); fi
           if [ "$DRY" = "true" ]; then args+=(--dry-run); fi
