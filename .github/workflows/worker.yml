@@ -272,7 +272,8 @@ jobs:
             echo "------ ⚡ chat smoke test ------"
             echo "seconds=$SECS events=$JOBS"
             [ -n "$ERR" ] && echo "errors: $ERR"
-            head -c 500 chat.txt 2>/dev/null
+            grep -o '"type":"status","text":"[^"]*"' chat.txt 2>/dev/null | head -8 || true
+            head -c 2000 chat.txt 2>/dev/null
             echo ""
           } >> report.txt
           if [ "${JOBS:-0}" -ge 2 ]; then

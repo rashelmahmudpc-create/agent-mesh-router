@@ -224,6 +224,14 @@ class AutoDeployTest(unittest.TestCase):
         self.assertIn("/user/tokens/verify", self.wf)    # API Token
         self.assertIn("for name, value in CANDIDATES", self.wf)  # একটার পর একটা চেষ্টা
 
+    def test_models_fall_back_within_a_provider(self):
+        """মডেলের নাম পুরনো হয়ে গেলে (404) পরের মডেল চেষ্টা করে।"""
+        worker = (ROOT / "worker" / "index.js").read_text(encoding="utf-8")
+        self.assertIn("models:", worker)
+        self.assertIn("for (const model of models)", worker)
+        self.assertIn("gemini-2.5-flash", worker)
+        self.assertIn("OpenRouter key আছে", worker)  # দ্বিতীয় key ব্যবহার
+
     def test_email_is_used_for_global_key(self):
         for name in ("CF_EMAIL", "CLOUDFLARE_EMAIL", "ADMISSIONSKY_CLOUDFLARE_EMAIL"):
             self.assertIn(f"secrets.{name}", self.wf, f"{name} চেনে না")
