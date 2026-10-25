@@ -84,6 +84,10 @@ def main(argv: list[str] | None = None) -> int:
         "--free-model", action="store_true", help="এখন কোন মডেল সত্যিই ফ্রি — OpenRouter তালিকা থেকে বলে দাও"
     )
     parser.add_argument(
+        "--openhands", metavar="TEXT", default=None,
+        help="🖐️ OpenHands ক্লাউড API দিয়ে একবার কাজ চালাও (OPENHANDS_API_KEY লাগবে)",
+    )
+    parser.add_argument(
         "--free-model-list", type=int, default=0, metavar="N",
         help="সেরা N টা ফ্রি মডেলের আইডি (প্রতি লাইনে একটা)",
     )
@@ -99,6 +103,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         _print_list(config)
         return 0
+
+    if args.openhands:
+        from .openhands_cloud import ask
+
+        result = ask(args.openhands)
+        print(("✅ " if result.ok else "") + result.text)
+        return 0 if result.ok else 1
 
     if args.free_model_list:
         from .models import discover_many

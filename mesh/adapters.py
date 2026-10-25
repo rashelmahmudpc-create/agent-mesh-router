@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from .config import AgentSpec
+from .keystate import KeyState, default_state
 from .keys import collect_keys, expand_env_value
 from .textutil import clean_reply, clip, looks_like_quota_problem, strip_ansi
 
@@ -53,6 +54,7 @@ class CliAdapter:
         dry_run: bool = False,
         environ: dict[str, str] | None = None,
         reply_limit: int = 4000,
+        keystate: KeyState | None = None,
     ) -> None:
         self.spec = spec
         self.runner = runner or subprocess_runner
@@ -60,6 +62,7 @@ class CliAdapter:
         self.dry_run = dry_run
         self.environ = environ if environ is not None else dict(os.environ)
         self.reply_limit = reply_limit
+        self.keystate = keystate or default_state()
 
     def _cmd(self, message: str, template: list[str] | None = None) -> list[str]:
         out = []
@@ -81,7 +84,7 @@ class CliAdapter:
     def send(self, message: str, sender: str = "owner") -> Reply:
         """প্রথম কমান্ড; ব্যর্থ হলে (কোটা/লিমিট) fallback কমান্ডগুলো চেষ্টা করে।"""
         templates = [self.spec.command, *self.spec.fallback_commands]
-        attempts = collect_keys(self.spec.keys, self.environ) or [("", "")]
+        attempts = self.keystate.order(collect_keys(self.spec.keys, self.environ)) or [("", "")]
 
         last = Reply(self.spec.name, self.spec.display(), False, "কোনো চেষ্টা হয়নি")
         for template in templates:
@@ -101,6 +104,8 @@ class CliAdapter:
                 text = strip_ansi(out or err)
                 cleaned = clean_reply(out or "")
                 if code == 0 and cleaned:
+                    if var:
+                        self.keystate.mark_ok(var)
                     reply_text = clip(cleaned, self.reply_limit)
                     return Reply(self.spec.name, self.spec.display(), True, reply_text, {"key": var or None})
                 if code == 0:
@@ -115,6 +120,9 @@ class CliAdapter:
                 last = Reply(self.spec.name, self.spec.display(), False, clip(text, self.reply_limit), {"code": code})
                 if not looks_like_quota_problem(out, err):
                     return last  # key বা কোটা সমস্যা নয় — fallback দিয়ে লাভ নেই
+                if var:
+                    # এই key কিছুক্ষণ বন্ধ রাখি, পরের রানে যেন সময় নষ্ট না হয়
+                    self.keystate.mark_failed(var, reason=clip(text, 160))
         return last
 
 
@@ -160,6 +168,31 @@ class GitHubIssueAdapter:
         return Reply(self.spec.name, self.spec.display(), False, clip(err or out, 1500), {"code": code})
 
 
+class OpenHandsCloudAdapter:
+    """🖐️ OpenHands — ওদের ক্লাউড API (SDK), প্রতিটা কাজ আলাদা conversation এ।"""
+
+    def __init__(self, spec, dry_run: bool = False, environ: dict | None = None, reply_limit: int = 4000):
+        self.spec = spec
+        self.dry_run = dry_run
+        self.environ = environ if environ is not None else dict(os.environ)
+        self.reply_limit = reply_limit
+
+    def send(self, message: str, sender: str = "owner") -> Reply:
+        if self.dry_run:
+            return Reply(self.spec.name, self.spec.display(), True, f"[dry-run] openhands cloud ← {message}",
+                         {"dry_run": True})
+        from .openhands_cloud import ask
+
+        result = ask(message, api_key=(self.environ.get("OPENHANDS_API_KEY") or "").strip())
+        return Reply(
+            self.spec.name,
+            self.spec.display(),
+            result.ok,
+            clip(clean_reply(result.text), self.reply_limit),
+            {"detail": result.detail},
+        )
+
+
 def build_adapter(
     spec: AgentSpec,
     runner: Runner | None = None,
@@ -169,6 +202,8 @@ def build_adapter(
     environ: dict[str, str] | None = None,
     reply_limit: int = 4000,
 ):
+    if spec.kind == "openhands_cloud":
+        return OpenHandsCloudAdapter(spec, dry_run=dry_run, environ=environ, reply_limit=reply_limit)
     if spec.kind == "github_issue":
         return GitHubIssueAdapter(spec, runner=runner, workdir=workdir, dry_run=dry_run, issue=issue, environ=environ)
     return CliAdapter(

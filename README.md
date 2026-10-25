@@ -64,6 +64,16 @@ python3 -m mesh.cli "হাই" --mode group
 🛡️ নিরাপত্তা: প্রতিটা comment লেখার আগে **key/token মুছে ফেলা হয়** (`redact`)।
 🔁 লুপ বন্ধ: বটের comment আর `<!-- mesh:… -->` চিহ্নযুক্ত comment ওয়ার্কফ্লো চালায় না।
 
+## 🔑 Key পুল ও priority
+
+```
+১. 🖐️ OpenHands (ওদের ক্লাউড, priority 1)
+২. 🧑‍💻 OpenCode  → ৩. ☤ Hermes  → ৪. 🟠 Claude Code
+```
+
+- quota/429 হলে key **১ ঘণ্টা কুলডাউনে** (`.mesh/keystate.json`), পরের রানে পিছনে যায়
+- বিস্তারিত: [`docs/key-pool-bn.md`](docs/key-pool-bn.md)
+
 ## 🔁 ব্যর্থ হলে কী হয়
 
 1. **খালি উত্তর** = ব্যর্থ (সফল নয়) — `empty` ফ্ল্যাগ
@@ -94,7 +104,7 @@ python3 -m mesh.cli "হাই" --mode group
 | 🟠 **Claude Code** | CLI | OpenRouter `:free` মডেল (fallback ২টা) | ✅ OpenRouter |
 | ☤ **Hermes** | CLI | `hermes-agent` (pip) · `openrouter/free` | ✅ OpenRouter |
 | 🟦 **Cline** | ⏸️ বন্ধ | ফ্রি টিয়ারে টোকেন বাজেট অনেক বড় চায় | — |
-| 🖐️ **OpenHands** | ⏸️ বন্ধ | ওদের GitHub App বসালে চালু — [`docs/openhands-setup-bn.md`](docs/openhands-setup-bn.md) | ❌ |
+| 🖐️ **OpenHands** | ⏸️ key চাই | ওদের ক্লাউড **API** (priority 1) — `OPENHANDS_API_KEY` দিলেই চালু | ❌ (ওদের ফ্রি) |
 
 📊 সব কাজের অবস্থা এক পাতায়: **[`docs/status-bn.md`](docs/status-bn.md)**
 
@@ -173,6 +183,8 @@ XAI_API_KEY             # (ঐচ্ছিক) রিভিউয়ার / দ
 | `--dry-run` | কিছুই চালাবে না, শুধু দেখাবে |
 | `--issue N` | ওই Issue-কে হলঘর বানাও + উত্তর comment করো |
 | `--json` | মেশিন-পাঠ্য আউটপুট |
+| `--free-model-list N` | আজকের সেরা N টা ফ্রি মডেল |
+| `--openhands "কাজ"` | 🖐️ ওদের ক্লাউড API দিয়ে একবার চালাও |
 
 `--doctor` এর ফল: ✅ ঠিক · ⚠️ সতর্কতা (এজেন্ট ইনস্টল নেই) · ❌ সমস্যা (key নেই)।
 

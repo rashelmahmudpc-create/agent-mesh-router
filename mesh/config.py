@@ -24,6 +24,7 @@ class AgentSpec:
     keys: list[str] = field(default_factory=list)
     keywords: list[str] = field(default_factory=list)
     daily_limit: int | None = None
+    priority: int = 50  # ছোট সংখ্যা = আগে ডাকা হবে
     mention: str = ""
     notes: str = ""
 
