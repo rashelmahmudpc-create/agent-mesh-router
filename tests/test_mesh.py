@@ -709,3 +709,15 @@ class FreeModelDiscoveryTest(unittest.TestCase):
         from mesh import cli
 
         self.assertEqual(cli.main(["--free-model"]), 1)
+
+
+class WorkflowShellHygieneTest(unittest.TestCase):
+    """bash এ ভুল escape (tr '\\n') দিয়ে মডেলের নাম নষ্ট হয়েছিল — আর যেন না হয়।"""
+
+    def test_no_literal_double_backslash_n_in_tr(self):
+        text = (ROOT / ".github" / "workflows" / "mesh.yml").read_text(encoding="utf-8")
+        self.assertNotIn("tr '\\\\n'", text)
+        self.assertNotIn("tr '\\n'", text)
+
+    def test_free_model_file_is_ignored(self):
+        self.assertIn("free-model.txt", (ROOT / ".gitignore").read_text(encoding="utf-8"))
