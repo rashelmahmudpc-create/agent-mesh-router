@@ -1,0 +1,88 @@
+# 📱 মেশ চ্যাট — iPhone-এ অ্যাপের মতো চ্যাট
+
+ChatGPT-স্টাইল একটা চ্যাট অ্যাপ। ফোনেই জমা থাকে, ইন্টারনেট ছাড়াও খোলে,
+আর চাইলে আসল এজেন্টদের (OpenCode / Claude / Hermes) সাথে জোড়া যায়।
+
+| কী | কোথায় |
+|---|---|
+| অ্যাপের কোড | `docs/app/` (vanilla HTML/CSS/JS, কোনো ফ্রেমওয়ার্ক নেই) |
+| সার্ভার (ঐচ্ছিক) | `worker/` (Cloudflare Worker) |
+| অটো টেস্ট | `tests/test_pwa.py`, `tests/js/`, `docs/app/tests/` |
+
+---
+
+## ১️⃣ সবচেয়ে সহজ: ডেমো মোডে চালান (০ মিনিট)
+
+`docs/app/index.html` খুললেই অ্যাপ চলে — কোনো সার্ভার, key বা ইন্টারনেট লাগে না।
+উত্তরগুলো ভেতরের ছোট "ব্রেইন" থেকে আসে, তাই এগুলো **আসল এজেন্টের উত্তর নয়**।
+
+```bash
+python3 -m http.server 8080 --directory docs/app
+# তারপর ব্রাউজারে: http://localhost:8080
+```
+
+## ২️⃣ iPhone-এ ইনস্টল (৩ ধাপ)
+
+1. Safari-তে অ্যাপের ঠিকানা খুলুন
+2. নিচের **Share** বাটন → **Add to Home Screen**
+3. নাম "মেশ চ্যাট" → **Add**
+
+এরপর হোম স্ক্রিনের আইকনে চাপ দিলে ব্রাউজার বার ছাড়াই খুলবে — সাধারণ অ্যাপের মতো। ✅
+
+### ঠিকানা কোথা থেকে?
+
+- **GitHub Pages (সহজ, কোনো টুলিং লাগে না):** Settings → Pages → Source = **Deploy from a branch**
+  → Branch = `main`, Folder = **/docs** → Save।
+  এক মিনিট পর ঠিকানা: `https://<ইউজারনেম>.github.io/agent-mesh-router/app/`
+- চাইলে Cloudflare Pages-এও দেওয়া যায় (build command নেই, output folder = `docs/app`)
+
+## ৩️⃣ লাইভ করা — আসল এজেন্টরা উত্তর দেবে (ঐচ্ছিক)
+
+### Worker ডিপ্লয় (একবারের কাজ)
+
+```bash
+cd worker
+npx wrangler deploy           # প্রথমবার লগইন চাইবে
+npx wrangler secret put GITHUB_TOKEN   # fine-grained PAT, শুধু Issues: Read & Write
+npx wrangler secret put APP_PASSCODE   # নিজের একটা পাসকোড
+```
+
+`wrangler.toml`-এ `MESH_REPO` আর `MESH_ISSUE` বসিয়ে দিন (হলঘর Issue নম্বর)।
+
+### অ্যাপে বসান
+
+সেটিংস → **সার্ভার ঠিকানা** = `https://mesh-chat.<আপনার-নাম>.workers.dev`
+→ **পাসকোড** = যেটা দিয়েছেন → **সেভ করুন**।
+উপরের ব্যাজ 🟡 → 🟢 হয়ে গেলে লাইভ।
+
+### ভেতরে কী ঘটে
+
+1. অ্যাপ → Worker → Issue-এ comment: `@mesh আপনার কথা`
+2. GitHub Actions মেশ চালায় → এজেন্টরা উত্তর দেয়
+3. উত্তরগুলো comment হয়ে ফিরে আসে → অ্যাপ ২.৫ সেকেন্ড পর পর দেখে নেয়
+   (সাধারণত ১–২ মিনিট লাগে)
+
+> 💡 Issue comment থেকে ডাকা হলে মেশ **group** মোডে চলে — সব এজেন্ট একসাথে উত্তর দেয়।
+
+---
+
+## 🔒 নিরাপত্তা
+
+- GitHub টোকেন **কখনো অ্যাপে যায় না** — শুধু Worker-এর env-এ থাকে
+- পাসকোড না মিললে Worker 401 দেয়
+- চ্যাট শুধু আপনার ফোনের `localStorage`-এ জমা থাকে
+- এজেন্টের লেখা মার্কডাউন আগে escape হয় → `<script>` কখনো চলে না
+
+## 💰 খরচ
+
+প্রতি মেসেজে **একটা Actions রান** হয় (৩টা এজেন্ট ≈ ৩টি রিকোয়েস্ট)।
+পাবলিক রিপোতে Actions মিনিট ফ্রি; প্রাইভেট হলে মাসে ২০০০ মিনিটের হিসাব রাখুন।
+
+## 🧪 টেস্ট
+
+```bash
+python3 -m unittest discover -s tests        # সব (Python + Node)
+node tests/js/worker_check.mjs               # শুধু Worker
+cd docs/app && node --test tests/md.test.mjs  # শুধু মার্কডাউন
+npm i --no-save jsdom && node tests/js/dom_check.mjs   # আসল DOM পরীক্ষা
+```

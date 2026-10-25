@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="bn" data-theme="auto">
+<head>
+  <meta charset="utf-8" />
+  <title>মেশ চ্যাট</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="ZAYAN মেশ — সব এজেন্ট এক জায়গায়। ChatGPT-স্টাইল চ্যাট, iPhone-এ অ্যাপের মতো।" />
+  <meta name="format-detection" content="telephone=no" />
+
+  <!-- 🎨 iOS স্ট্যাটাস বার / ব্রাউজার রঙ -->
+  <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+
+  <!-- 📱 iPhone-এ "Add to Home Screen" করলে অ্যাপের মতো খোলে -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="মেশ চ্যাট" />
+
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png" />
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- ☰ পাশের ড্রয়ার (ChatGPT-এর মতো চ্যাট লিস্ট) -->
+    <aside class="drawer" id="drawer" aria-label="চ্যাট তালিকা" aria-hidden="true">
+      <div class="drawer__head">
+        <div class="brand">
+          <span class="brand__mark" aria-hidden="true">🧠</span>
+          <div class="brand__text">
+            <strong>মেশ চ্যাট</strong>
+            <small>ZAYAN Global Brain</small>
+          </div>
+        </div>
+        <button class="icon-btn" id="drawerClose" type="button" aria-label="বন্ধ করুন">✕</button>
+      </div>
+
+      <button class="new-chat" id="newChat" type="button">
+        <span aria-hidden="true">＋</span> নতুন চ্যাট
+      </button>
+
+      <nav class="chat-list" id="chatList" aria-label="আগের চ্যাটগুলো"></nav>
+
+      <div class="drawer__foot">
+        <button class="ghost-btn" id="openSettings" type="button">⚙️ সেটিংস</button>
+        <p class="tiny" id="modeLine">🟡 ডেমো মোড — ইন্টারনেট ছাড়াই চলে</p>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim" hidden></div>
+
+    <!-- 🔝 উপরের বার -->
+    <header class="topbar">
+      <button class="icon-btn" id="menuBtn" type="button" aria-label="মেনু">☰</button>
+      <div class="topbar__title">
+        <strong id="chatTitle">নতুন চ্যাট</strong>
+        <span class="pill" id="statusPill">🟡 ডেমো</span>
+      </div>
+      <button class="icon-btn" id="newChatTop" type="button" aria-label="নতুন চ্যাট">✎</button>
+    </header>
+
+    <!-- 💬 কথাবার্তা -->
+    <main class="thread" id="thread" role="log" aria-live="polite" aria-label="কথাবার্তা">
+      <section class="empty" id="empty">
+        <div class="empty__mark" aria-hidden="true">🧠</div>
+        <h1>আসসালামু আলাইকুম, স্যার 👋</h1>
+        <p>কী করতে হবে লিখুন — বাকিটা এজেন্টরা দেখবে।</p>
+        <div class="chips" id="suggestions">
+          <button class="chip chip--lg" type="button" data-fill="আজকের কাজের অবস্থা এক লাইনে বলো">📊 আজকের অবস্থা</button>
+          <button class="chip chip--lg" type="button" data-fill="এই সপ্তাহে কী কী করা দরকার, সহজ বাংলায় বলো">🗓️ কী করবো</button>
+          <button class="chip chip--lg" type="button" data-fill="এই রিপোতে কী কী আছে সহজ ভাষায় বুঝিয়ে দাও">📁 রিপো বুঝিয়ে দাও</button>
+          <button class="chip chip--lg" type="button" data-fill="একটা ছোট কাজ ধরো এবং শেষ করো">🛠️ ছোট কাজ</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- ✍️ লেখার বাক্স -->
+    <form class="composer" id="composer" autocomplete="off">
+      <div class="composer__box">
+        <textarea
+          id="input"
+          rows="1"
+          placeholder="কিছু লিখুন…"
+          enterkeyhint="send"
+          autocapitalize="sentences"
+          spellcheck="false"
+          aria-label="আপনার কথা"
+        ></textarea>
+        <button class="send" id="send" type="submit" aria-label="পাঠান">
+          <span aria-hidden="true">↑</span>
+        </button>
+      </div>
+      <div class="composer__meta">
+        <button class="chip" id="modeChip" type="button" title="কীভাবে চালাবে">⚡ direct</button>
+        <span class="tiny" id="hint">ডেমো মোডে উত্তর নিজেই আসে</span>
+      </div>
+    </form>
+  </div>
+
+  <!-- ⚙️ সেটিংস -->
+  <dialog class="sheet" id="settingsSheet" aria-label="সেটিংস">
+    <form method="dialog" class="sheet__inner" id="settingsForm">
+      <div class="sheet__head">
+        <strong>⚙️ সেটিংস</strong>
+        <button class="icon-btn" value="close" type="submit" aria-label="বন্ধ">✕</button>
+      </div>
+
+      <label class="field">
+        <span>🌐 সার্ভার ঠিকানা (ঐচ্ছিক)</span>
+        <input id="apiBase" type="url" inputmode="url" placeholder="https://mesh-chat.xxxx.workers.dev" />
+        <small>খালি রাখলে <b>ডেমো মোড</b> চলবে — ইন্টারনেট লাগবে না।</small>
+      </label>
+
+      <label class="field">
+        <span>🔑 পাসকোড (ঐচ্ছিক)</span>
+        <input id="passcode" type="password" placeholder="সার্ভারে যেটা দিয়েছেন" />
+        <small>শুধু আপনার ব্রাউজারে জমা থাকে, কোথাও পাঠানো হয় না।</small>
+      </label>
+
+      <div class="field">
+        <span>🎨 থিম</span>
+        <div class="seg" id="themeSeg" role="group" aria-label="থিম">
+          <button type="button" data-theme="auto">অটো</button>
+          <button type="button" data-theme="dark">কালো</button>
+          <button type="button" data-theme="light">সাদা</button>
+        </div>
+      </div>
+
+      <div class="sheet__actions">
+        <button class="btn btn--primary" id="saveSettings" type="button">✅ সেভ করুন</button>
+        <button class="btn" id="testConn" type="button">🔌 যোগাযোগ পরীক্ষা</button>
+      </div>
+      <p class="tiny" id="settingsNote"></p>
+
+      <hr />
+      <button class="btn btn--danger" id="clearChats" type="button">🗑️ সব চ্যাট মুছে ফেলুন</button>
+      <p class="tiny">ভার্সন ১.০ · iPhone-এ Share → <b>Add to Home Screen</b> দিলে অ্যাপের মতো হবে।</p>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
+

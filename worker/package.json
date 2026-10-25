@@ -1,0 +1,7 @@
+{
+  "name": "mesh-chat-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "মেশ চ্যাট সার্ভার (Cloudflare Worker) — কোনো নির্ভরতা নেই"
+}
