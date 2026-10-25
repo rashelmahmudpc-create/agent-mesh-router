@@ -231,6 +231,11 @@ class AutoDeployTest(unittest.TestCase):
         self.assertIn("issues: write", self.wf)
         self.assertIn("gh issue comment", self.wf)
 
+    def test_worker_workflow_rechecks_itself(self):
+        """key পরে ঠিক করলেও যেন নিজে থেকে ধরা পড়ে।"""
+        self.assertIn("schedule:", self.wf)
+        self.assertIn("cron:", self.wf)
+
     def test_global_api_key_fallback(self):
         """Global API Key (X-Auth-Key + email) থাকলেও চলবে।"""
         self.assertIn("X-Auth-Key", self.wf)

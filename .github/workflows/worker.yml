@@ -1,5 +1,7 @@
 name: worker
 
+# 🔄 recheck: 2026-10-25T16:20Z (টোকেন আবার যাচাই)
+
 # ☁️ Cloudflare Worker — সম্পূর্ণ অটো ডিপ্লয় (কোনো ক্লিক নেই)
 #
 # 🔑 টোকেনের নাম যা-ই হোক, নিজেই খুঁজে নেয়:
@@ -22,6 +24,9 @@ on:
     paths:
       - "worker/**"
       - ".github/workflows/worker.yml"
+  # 🔁 প্রতি ৬ ঘণ্টায় নিজেই আবার চেষ্টা করে — স্যার পরে key ঠিক করলেও আপনাআপনি ধরা পড়বে
+  schedule:
+    - cron: "37 */6 * * *"
   workflow_dispatch:
 
 permissions:
