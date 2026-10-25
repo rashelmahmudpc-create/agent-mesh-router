@@ -16,6 +16,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Iterable
 
+from . import dailycap
 from .adapters import Reply, build_adapter
 from .chat import Store, default_store
 from .config import AgentSpec, MeshConfig
@@ -63,8 +64,8 @@ class Router:
             used = self.pair_calls.get((sender, name), 0)
             if used >= self.config.settings.max_pair_calls:
                 return False, f"{sender} ↔ {name} কথা বলার সীমা শেষ"
-        if spec.daily_limit and self.store.today_count(name) >= spec.daily_limit:
-            return False, "আজকের কোটা শেষ"
+        if spec.daily_limit and max(self.store.today_count(name), dailycap.used(name)) >= spec.daily_limit:
+            return False, f"আজকের কোটা শেষ ({spec.daily_limit}টার সীমা)"
         return True, ""
 
     def _bump(self, name: str, sender: str = "owner") -> None:
@@ -97,6 +98,9 @@ class Router:
         self.store.append(
             {"mode": "call", "agent": name, "sender": sender, "ok": reply.ok, "text": reply.text[:2000]}
         )
+        if reply.ok and spec.daily_limit:
+            # কোটা-খরচা এজেন্ট: হিসাবটা repo-তে লিখি, যাতে পরের রানও জানে
+            dailycap.bump(name)
         self.replies.append(reply)
         self.log(f"← {spec.display()} {'✅' if reply.ok else '❌'}")
         return reply

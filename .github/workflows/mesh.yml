@@ -132,40 +132,23 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "--- keycheck ---"; cat keys.md
 
-      - name: 🖐️ OpenHands live check (দিনে একবার)
+      - name: 🖐️ OpenHands কোটা (আজ কতবার)
         if: steps.guard.outputs.skip != 'true'
         continue-on-error: true
-        # 🖐️ OpenHands key আসলেই কাজ করে কি না — দিনে একবার সত্যিকারের এক conversation
-        env:
-          OPENHANDS_API_KEY: ${{ secrets.OPENHANDS_API_KEY }}
+        # 🖐️ আলাদা key-টেস্ট আর দরকার নেই: OpenHands এখন গ্রুপ চ্যাটেই উত্তর দেয় —
+        #    সেই উত্তরটাই আসল প্রমাণ। এখানে শুধু দিনের হিসাব দেখাই।
         run: |
-          set -uo pipefail
-          TODAY=$(date -u '+%Y-%m-%d')
-          LAST=$(tr -d '[:space:]' < .mesh-openhands-ok 2>/dev/null || true)
-          if [ "$LAST" = "$TODAY" ]; then
-            echo "⏭️ আজ ($TODAY) OpenHands আগেই ✅ হয়েছে — কোটা বাঁচাতে আবার চালালাম না" | tee openhands.txt
-            exit 0
-          fi
-          if [ -z "${OPENHANDS_API_KEY:-}" ]; then
-            echo "❌ OPENHANDS_API_KEY নেই — GitHub → Settings → Secrets এ যোগ করুন" | tee openhands.txt
-            exit 0
-          fi
-          python -m mesh.cli --openhands "এক লাইনে বলো: তুমি কাজ করছো কি না" > openhands.txt 2>&1 || true
           {
-            echo "## 🖐️ OpenHands লাইভ পরীক্ষা"
+            python -c "from mesh import dailycap; print(dailycap.summary())" 2>/dev/null || echo "(হিসাব নেই)"
+            echo "সীমা: দিনে ২টা conversation (config/agents.json → openhands.daily_limit)"
+          } | tee openhands.txt
+          {
+            echo "## 🖐️ OpenHands"
             echo ""
             echo '```'
             cat openhands.txt
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          if grep -q '^✅' openhands.txt; then
-            echo "$TODAY" > .mesh-openhands-ok
-            git config user.name "mesh-bot"
-            git config user.email "mesh-bot@users.noreply.github.com"
-            git add .mesh-openhands-ok
-            git commit -m "chore: OpenHands লাইভ পরীক্ষা ✅ $TODAY" || true
-            git push || true
-          fi
+          } >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Doctor (কে সাড়া দেবে?)
         if: steps.guard.outputs.skip != 'true'
@@ -274,6 +257,20 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY" || true
 
+      - name: 💾 দিনের হিসাব সেভ (পরের রান যেন জানে)
+        if: always() && steps.guard.outputs.skip != 'true'
+        continue-on-error: true
+        # কোটা-খরচা এজেন্টের হিসাব repo-তে থাকে, নইলে প্রতিটা রান শূন্য থেকে শুরু করে
+        run: |
+          set -uo pipefail
+          if [ ! -f .mesh-daily.json ]; then exit 0; fi
+          git add .mesh-daily.json
+          if git diff --cached --quiet; then echo "কিছু বদলায়নি"; exit 0; fi
+          git config user.name "mesh-bot"
+          git config user.email "mesh-bot@users.noreply.github.com"
+          git commit -m "chore: আজকের এজেন্ট কোটা $(date -u '+%Y-%m-%d')"
+          git push || true
+
       - name: Publish status to an Issue (পড়া যায় এমন লগ)
         if: always() && steps.guard.outputs.skip != 'true'
         continue-on-error: true
@@ -301,10 +298,10 @@ jobs:
             echo ""
             echo "</details>"
             echo ""
-            echo "<details><summary>🖐️ OpenHands লাইভ পরীক্ষা</summary>"
+            echo "<details><summary>🖐️ OpenHands কোটা</summary>"
             echo ""
             echo '```'
-            cat openhands.txt 2>/dev/null || echo "(আজ চালানো হয়নি)"
+            cat openhands.txt 2>/dev/null || echo "(হিসাব নেই)"
             echo '```'
             echo ""
             echo "</details>"

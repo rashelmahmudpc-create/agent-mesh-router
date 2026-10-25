@@ -105,7 +105,11 @@ def _default_factory(api_key: str, cloud_url: str, model: str):
         with OpenHandsCloudWorkspace(cloud_api_url=cloud_url, cloud_api_key=api_key) as workspace:
             conversation = Conversation(agent=agent, workspace=workspace)
             conversation.send_message(message)
-            conversation.run()
+            timeout = float(os.environ.get("OPENHANDS_TIMEOUT", "600"))
+            try:
+                conversation.run(timeout=timeout)
+            except TypeError:  # পুরনো SDK-তে timeout প্যারামিটার নেই
+                conversation.run()
             return _last_text(conversation)
 
     return run
