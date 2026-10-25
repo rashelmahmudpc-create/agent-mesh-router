@@ -34,6 +34,9 @@ PROBES: dict[str, tuple[str, str]] = {
     "GROQ_API_KEY": ("bearer", "https://api.groq.com/openai/v1/models"),
     "VERCEL_AI_GATEWAY": ("bearer", "https://ai-gateway.vercel.sh/v1/models"),
     "VERCEL_AI_GETAWAY": ("bearer", "https://ai-gateway.vercel.sh/v1/models"),  # বানানের ভিন্নতা
+    "VERCEL_AI_GATEWAY_KEY": ("bearer", "https://ai-gateway.vercel.sh/v1/models"),
+    "AI_GATEWAY_API_KEY": ("bearer", "https://ai-gateway.vercel.sh/v1/models"),
+    "VERCEL_GATEWAY_KEY": ("bearer", "https://ai-gateway.vercel.sh/v1/models"),
     # gemini → URL এ ?key=
     "GEMINI_API_KEY": ("gemini", "https://generativelanguage.googleapis.com/v1beta/models"),
     "GOOGLE_API_KEY": ("gemini", "https://generativelanguage.googleapis.com/v1beta/models"),

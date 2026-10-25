@@ -1,4 +1,4 @@
 # 🚀 অটো-রান সুইচ
 
-# সময় (UTC): 2026-10-25T12:00:48Z
-# কারণ: key check এর ভুল ঠিক (ঘোরানো key, UA, Vercel alias) + Hermes provider
+# সময় (UTC): 2026-10-25T12:06:24Z
+# কারণ: Hermes শুধু ফ্রি মডেল + Vercel key-এর নাম খোঁজা
