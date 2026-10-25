@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Iterable
 
 from .adapters import Reply, build_adapter
@@ -35,6 +35,7 @@ class Router:
         store: Store | None = None,
         environ: dict[str, str] | None = None,
         log: LogFn | None = None,
+        on_reply: Callable[["Reply"], None] | None = None,
     ) -> None:
         self.config = config
         self.runner = runner
@@ -44,6 +45,8 @@ class Router:
         self.store = store or default_store()
         self.environ = environ
         self.log = log or (lambda _msg: None)
+        # উত্তর তৈরি হওয়ামাত্রই ডাকবে (Issue-এ সাথে সাথে comment যাবে → অ্যাপে দ্রুত দেখা যাবে)
+        self.on_reply = on_reply
 
         self.calls = 0
         self.pair_calls: dict[tuple[str, str], int] = {}
@@ -134,10 +137,19 @@ class Router:
 
     # ---------- মোড ১: ডাইরেক্ট ----------
 
+    def _emit(self, reply: "Reply") -> "Reply":
+        """উত্তর তৈরি হওয়ামাত্র callback ডাকে (থাকলে)।"""
+        if self.on_reply is not None:
+            try:
+                self.on_reply(reply)
+            except Exception as err:  # callback ব্যর্থ হলেও রান থামবে না
+                self.log(f"⚠️ reply পাঠাতে সমস্যা: {err}")
+        return reply
+
     def direct(self, message: str) -> list[Reply]:
         out: list[Reply] = []
         for name in self.classify(message):
-            reply = self.call(name, message, "owner")
+            reply = self._emit(self.call(name, message, "owner"))
             out.append(reply)
             if reply.ok:
                 return out
@@ -148,7 +160,7 @@ class Router:
                 continue
             if len(out) >= 3:
                 break
-            reply = self.call(spec.name, message, "owner")
+            reply = self._emit(self.call(spec.name, message, "owner"))
             out.append(reply)
             if reply.ok:
                 break
@@ -166,9 +178,14 @@ class Router:
                 runnable.append((name, sender))
         if not runnable:
             return []
+        # যার উত্তর আগে আসে, সে-ই আগে Issue-এ যাবে (অ্যাপে দ্রুত দেখা যাবে)
         with ThreadPoolExecutor(max_workers=min(8, len(runnable))) as pool:
             futures = [pool.submit(self.call, name, message, sender) for name, sender in runnable]
-            return [f.result() for f in futures]
+            collected: list[Reply | None] = [None] * len(futures)
+            for fut in as_completed(futures):
+                reply = fut.result()
+                collected[futures.index(fut)] = self._emit(reply)
+            return [r for r in collected if r is not None]
 
     def group(self, message: str, history: str = "") -> list[Reply]:
         """সবাইকে ডাকা হয়; `history` হলে (Issue এর পুরনো কথা) সেটাও পড়ে।"""

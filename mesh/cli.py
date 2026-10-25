@@ -151,12 +151,21 @@ def main(argv: list[str] | None = None) -> int:
     if not args.message.strip():
         parser.error("একটা কথা লিখুন, যেমন: python -m mesh.cli \"হাই\" --mode group")
 
+    # উত্তর তৈরি হওয়ামাত্রই Issue-এ comment যাবে → অ্যাপে দ্রুত দেখা যাবে
+    posted_ids: set[int] = set()
+
+    def _post_reply(reply) -> None:
+        body = reply.text if reply.ok else f"❌ সাড়া দিতে পারিনি\n\n{reply.text}"
+        if post_comment(args.issue, reply.agent, reply.label, body, dry_run=args.dry_run):
+            posted_ids.add(id(reply))
+
     router = Router(
         config,
         dry_run=args.dry_run,
         issue=args.issue,
         store=default_store(),
         log=None if args.json else (lambda msg: print(msg, file=sys.stderr)),
+        on_reply=_post_reply if args.issue else None,
     )
 
     history = fetch_hall(args.issue) if (args.issue and args.mode == "group") else ""
@@ -171,9 +180,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.issue:
         # সফল ও ব্যর্থ — দুটোরই comment যায়, যাতে Issue দেখেই বোঝা যায় কী হলো
+        # (on_reply আগেই যেগুলো পোস্ট করেছে, সেগুলো আবার নয়)
         for reply in replies:
-            body = reply.text if reply.ok else f"❌ সাড়া দিতে পারিনি\n\n{reply.text}"
-            post_comment(args.issue, reply.agent, reply.label, body, dry_run=args.dry_run)
+            if id(reply) in posted_ids:
+                continue
+            _post_reply(reply)
 
     if args.json:
         print(json.dumps([r.__dict__ for r in replies], ensure_ascii=False, indent=2))

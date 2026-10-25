@@ -114,6 +114,33 @@ class DirectModeTest(unittest.TestCase):
         self.assertGreaterEqual(len(runner.calls), 2)
 
 
+class StreamingReplyTest(unittest.TestCase):
+    """on_reply: উত্তর তৈরি হওয়ামাত্র callback ডাকে — Issue-এ সাথে সাথে comment যায়,
+    তাই অ্যাপে সবচেয়ে দ্রুত এজেন্টের উত্তর আগে দেখা যায় (সবার জন্য অপেক্ষা নয়)।"""
+
+    def test_direct_emits_each_reply(self):
+        seen = []
+        router = make_router(FakeRunner(), on_reply=seen.append)
+        replies = router.direct("এই bug টা ঠিক করো")
+        self.assertEqual(len(seen), len(replies))
+        self.assertIs(seen[0], replies[0])
+
+    def test_group_emits_every_agent(self):
+        seen = []
+        router = make_router(FakeRunner(), on_reply=seen.append)
+        replies = router.group("হাই")
+        self.assertEqual(len(seen), len(replies))
+        self.assertCountEqual([r.agent for r in seen], [r.agent for r in replies])
+
+    def test_callback_error_does_not_break_run(self):
+        def boom(_reply):
+            raise RuntimeError("network")
+
+        router = make_router(FakeRunner(), on_reply=boom)
+        replies = router.group("হাই")
+        self.assertTrue(any(r.ok for r in replies))
+
+
 class GroupModeTest(unittest.TestCase):
     def test_fanout_to_all_chat_agents(self):
         runner = FakeRunner()
