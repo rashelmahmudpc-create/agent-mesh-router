@@ -240,6 +240,18 @@ check("⚡ comment-এ key ফাঁস হয়নি", !/or-test|gq-test|gm-t
 }
 
 {
+  // 🧠 আগের কথা মডেলকে পাঠানো হয়
+  llmCalls.length = 0;
+  const before = llmCalls.length;
+  await fastChat({ mode: "agent", message: "এটা ঠিক করো", history: [
+    { role: "user", text: "আমার কোডে বাগ আছে" },
+    { role: "assistant", text: "কোন ফাইলে?" },
+  ] });
+  const sent = llmCalls.length ? JSON.parse(llmCalls[0].init.body).messages : [];
+  check("🧠 history পাঠানো হয়েছে", sent.length >= 4 && sent[1].content.includes("বাগ"), `${sent.length}টা message`);
+}
+
+{
   // 🐢 key না থাকলে পুরনো Actions পথেই চলে
   const oldFetch = globalThis.fetch;
   globalThis.fetch = realFetch;

@@ -260,9 +260,9 @@ const PROVIDERS = {
       ? [env.FAST_MODEL_GROQ]
       : ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-120b"]),
     headers: (key) => ({ "content-type": "application/json", authorization: `Bearer ${key}` }),
-    body: (env, model, system, user) => ({
+    body: (env, model, system, user, history = []) => ({
       model,
-      messages: [{ role: "system", content: system }, { role: "user", content: user }],
+      messages: [{ role: "system", content: system }, ...history, { role: "user", content: user }],
       max_tokens: 400,
       temperature: 0.3,
     }),
@@ -289,7 +289,7 @@ const PROVIDERS = {
     }),
     body: (env, model, system, user) => ({
       model,
-      messages: [{ role: "system", content: system }, { role: "user", content: user }],
+      messages: [{ role: "system", content: system }, ...history, { role: "user", content: user }],
       max_tokens: 400,
       temperature: 0.3,
       reasoning: { exclude: true }, // 🧠 ভেতরের চিন্তা ফেরত দিও না
@@ -305,9 +305,12 @@ const PROVIDERS = {
       ? [env.FAST_MODEL_GEMINI]
       : ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]),
     headers: (key) => ({ "content-type": "application/json", "x-goog-api-key": key }),
-    body: (env, model, system, user) => ({
+    body: (env, model, system, user, history = []) => ({
       systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: "user", parts: [{ text: user }] }],
+      contents: [
+        ...history.map((h) => ({ role: h.role === "assistant" ? "model" : "user", parts: [{ text: h.content }] })),
+        { role: "user", parts: [{ text: user }] },
+      ],
       generationConfig: {
         maxOutputTokens: 400,
         temperature: 0.3,
@@ -386,7 +389,7 @@ function personaAgent(persona) {
 }
 
 /** একটা এজেন্টের উত্তর — provider চেইন ধরে, সময় শেষ হলে ছেড়ে দেয় */
-async function askModel(env, persona, message) {
+async function askModel(env, persona, message, history = []) {
   const timeout = Number(env.FAST_TIMEOUT_MS) || 20000;
   const system = `${FAST_RULES}\n\n${persona.style}\n\nতোমার নাম ${persona.name} (${persona.emoji})।`;
   const failures = [];
@@ -404,7 +407,7 @@ async function askModel(env, persona, message) {
         const res = await fetch(provider.url(env, model), {
           method: "POST",
           headers: provider.headers(key),
-          body: JSON.stringify(provider.body(env, model, system, message)),
+          body: JSON.stringify(provider.body(env, model, system, message, history)),
           signal: AbortSignal.timeout(timeout),
         });
         const raw = await res.text();
@@ -458,6 +461,11 @@ async function handleFastChat(env, ctx, payload) {
     .map((f) => f?.name)
     .filter(Boolean);
   const question = `${text}${names.length ? `\n\n📎 সংযুক্ত ফাইল: ${names.join(", ")}` : ""}`;
+  // 🧠 আগের কথা মনে রাখি (সর্বোচ্চ ৬ পাতা) — উত্তর প্রাসঙ্গিক থাকে
+  const history = (Array.isArray(payload?.history) ? payload.history : [])
+    .filter((h) => h && typeof h.text === "string" && h.text.trim())
+    .slice(-6)
+    .map((h) => ({ role: h.role === "assistant" ? "assistant" : "user", content: h.text.slice(0, 600) }));
   const picked = pickPersona(text, mode);
   const startedAt = Date.now();
 
@@ -476,7 +484,7 @@ async function handleFastChat(env, ctx, payload) {
 
     await Promise.all(picked.map(async (persona) => {
       const agent = personaAgent(persona);
-      const result = await askModel(env, persona, question);
+      const result = await askModel(env, persona, question, history);
       if (!result.ok) {
         send({ type: "status", text: `${agent.emoji} ${agent.name}: উত্তর পাওয়া যায়নি, অন্য পথে চেষ্টা করছি…` });
         return;

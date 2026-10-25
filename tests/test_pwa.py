@@ -280,6 +280,13 @@ class AutoDeployTest(unittest.TestCase):
         self.assertIn("reasoning: { exclude: true }", worker)      # OpenRouter
         self.assertIn("thinkingBudget: 0", worker)                  # Gemini
 
+    def test_conversation_history_is_remembered(self):
+        """আগের কথা না পাঠালে উত্তর প্রাসঙ্গিক হয় না।"""
+        worker = (ROOT / "worker" / "index.js").read_text(encoding="utf-8")
+        self.assertIn("payload?.history", worker)
+        self.assertIn("...history", worker)
+        self.assertIn("history:hist", self.app)
+
     def test_app_reads_the_url_by_itself(self):
         self.assertIn("server.json", self.app)
         # নিজে বেছে নিলে (github/fast) ছোঁবে না, নইলে Worker আগে
