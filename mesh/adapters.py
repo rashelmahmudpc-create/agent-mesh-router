@@ -15,7 +15,7 @@ from typing import Callable
 
 from .config import AgentSpec
 from .keys import collect_keys, expand_env_value
-from .textutil import clip, looks_like_quota_problem
+from .textutil import clip, looks_like_quota_problem, strip_ansi
 
 # runner(cmd, env, cwd, timeout) -> (exit_code, stdout, stderr)
 Runner = Callable[[list[str], dict[str, str], str, int], tuple[int, str, str]]
@@ -61,9 +61,9 @@ class CliAdapter:
         self.environ = environ if environ is not None else dict(os.environ)
         self.reply_limit = reply_limit
 
-    def _cmd(self, message: str) -> list[str]:
+    def _cmd(self, message: str, template: list[str] | None = None) -> list[str]:
         out = []
-        for part in self.spec.command:
+        for part in (template or self.spec.command):
             part = expand_env_value(part, self.environ) if part.startswith("$") else part
             out.append(part.replace("{message}", message).replace("{workdir}", self.workdir))
         return out
@@ -79,31 +79,39 @@ class CliAdapter:
         return env
 
     def send(self, message: str, sender: str = "owner") -> Reply:
-        cmd = self._cmd(message)
-        if self.dry_run:
-            return Reply(self.spec.name, self.spec.display(), True, f"[dry-run] {' '.join(cmd)}", {"dry_run": True})
-
+        """প্রথম কমান্ড; ব্যর্থ হলে (কোটা/লিমিট) fallback কমান্ডগুলো চেষ্টা করে।"""
+        templates = [self.spec.command, *self.spec.fallback_commands]
         attempts = collect_keys(self.spec.keys, self.environ) or [("", "")]
+
         last = Reply(self.spec.name, self.spec.display(), False, "কোনো চেষ্টা হয়নি")
-        for var, value in attempts:
-            env = self._base_env()
-            if var:
-                env[re.sub(r"_\d+$", "", var)] = value
-            code, out, err = self.runner(cmd, env, self.workdir, self.spec.timeout_sec)
-            if code == 0 and (out or "").strip():
-                return Reply(self.spec.name, self.spec.display(), True, clip(out, self.reply_limit), {"key": var or None})
-            if code == 0:
-                # exit 0 কিন্তু কিছু বলেনি — এটাকে সফল বলা যায় না
-                return Reply(
-                    self.spec.name,
-                    self.spec.display(),
-                    False,
-                    "❌ এজেন্ট চালু হলো কিন্তু কোনো উত্তর দিল না (খালি আউটপুট)। key/মডেল ঠিক আছে কি না দেখুন।",
-                    {"code": code, "empty": True},
-                )
-            last = Reply(self.spec.name, self.spec.display(), False, clip(err or out, self.reply_limit), {"code": code})
-            if not looks_like_quota_problem(out, err):
-                break  # এটা key এর সমস্যা নয় — অন্য key দিয়ে লাভ নেই
+        for template in templates:
+            if not template:
+                continue
+            cmd = self._cmd(message, template)
+            for var, value in attempts:
+                env = self._base_env()
+                if var:
+                    env[re.sub(r"_\d+$", "", var)] = value
+                if self.dry_run:
+                    return Reply(
+                        self.spec.name, self.spec.display(), True,
+                        f"[dry-run] {' '.join(cmd)}", {"dry_run": True},
+                    )
+                code, out, err = self.runner(cmd, env, self.workdir, self.spec.timeout_sec)
+                text = strip_ansi(out or err)
+                if code == 0 and (out or "").strip():
+                    reply_text = clip(strip_ansi(out), self.reply_limit)
+                    return Reply(self.spec.name, self.spec.display(), True, reply_text, {"key": var or None})
+                if code == 0:
+                    last = Reply(
+                        self.spec.name, self.spec.display(), False,
+                        "❌ এজেন্ট চালু হলো কিন্তু কোনো উত্তর দিল না (খালি আউটপুট)।",
+                        {"code": code, "empty": True},
+                    )
+                    break  # এই কমান্ডে উত্তর নেই — পরের (fallback) চেষ্টা করি
+                last = Reply(self.spec.name, self.spec.display(), False, clip(text, self.reply_limit), {"code": code})
+                if not looks_like_quota_problem(out, err):
+                    return last  # key বা কোটা সমস্যা নয় — fallback দিয়ে লাভ নেই
         return last
 
 

@@ -64,6 +64,13 @@ python3 -m mesh.cli "হাই" --mode group
 🛡️ নিরাপত্তা: প্রতিটা comment লেখার আগে **key/token মুছে ফেলা হয়** (`redact`)।
 🔁 লুপ বন্ধ: বটের comment আর `<!-- mesh:… -->` চিহ্নযুক্ত comment ওয়ার্কফ্লো চালায় না।
 
+## 🔁 ব্যর্থ হলে কী হয়
+
+1. **খালি উত্তর** = ব্যর্থ (সফল নয়) — `empty` ফ্ল্যাগ
+2. `usage limit` / `unauthorized` / `credits` দেখলে → **fallback command** চেষ্টা
+3. কোটা-জাতীয় সমস্যা হলে → **পরের key** (`OPENROUTER_API_KEY_2`)
+4. সব ব্যর্থ হলে **কারণসহ comment** Issue এ যায় — `◈[91m` এর মতো টার্মিনাল কোড সরিয়ে (`strip_ansi`)
+
 ## 🛡️ খরচ ও লুপ নিয়ন্ত্রণ
 
 `config/agents.json` এর `settings`:
@@ -83,8 +90,8 @@ python3 -m mesh.cli "হাই" --mode group
 
 | এজেন্ট | ধরন | মাথা | key লাগে? |
 |---|---|---|---|
-| 🧑‍💻 **OpenCode** | CLI | DeepSeek V4.1 Flash (OpenCode এর ভেতরে ফ্রি) | ❌ |
-| 🟦 **Cline** | CLI | নিজের ফ্রি মডেল | ❌ |
+| 🧑‍💻 **OpenCode** | CLI | DeepSeek V4.1 Flash (ফ্রি) · লিমিট শেষ হলে OpenRouter fallback | ❌ |
+| 🟦 **Cline** | CLI | OpenRouter (`-P openrouter`) | ✅ OpenRouter |
 | 🟠 **Claude Code** | CLI | OpenRouter দিয়ে যেকোনো মডেল | ✅ OpenRouter |
 | ☤ **Hermes** | CLI | OpenRouter / নিজের পছন্দের মডেল | ✅ OpenRouter |
 | 🖐️ **OpenHands** | GitHub Issue | ওদের ক্লাউডে ফ্রি | ❌ |

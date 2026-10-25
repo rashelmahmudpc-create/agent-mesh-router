@@ -476,10 +476,13 @@ class CommandEnvTest(unittest.TestCase):
         custom = CliAdapter(spec, dry_run=True, environ={"OPENCODE_MODEL": "my/model"})
         self.assertIn("my/model", custom._cmd("হাই"))
 
-    def test_only_two_agents_active_by_default(self):
+    def test_unverified_agents_are_off_by_default(self):
         config = MeshConfig.load()
         active = [a.name for a in config.enabled()]
-        self.assertEqual(sorted(active), ["claude", "opencode"])
+        # যাচাই হয়নি এমন এজেন্ট ডিফল্টে বন্ধ থাকবে
+        for name in ("hermes", "openhands"):
+            self.assertNotIn(name, active)
+        self.assertIn("claude", active)
 
 
 class DoctorHonestyTest(unittest.TestCase):
@@ -493,3 +496,73 @@ class DoctorHonestyTest(unittest.TestCase):
         # শুধু key না থাকায় ব্যর্থ; বন্ধ এজেন্টগুলো শুধু সতর্কতা
         fails = [c.item for c in checks if c.status == "fail"]
         self.assertEqual(fails, ["claude keys"])
+
+
+class AnsiAndFallbackTest(unittest.TestCase):
+    def test_ansi_is_stripped_from_replies(self):
+        from mesh.textutil import strip_ansi
+
+        messy = "◈[0m\n> build · model\n◈[91m◈[1mError: ◈[0mFree usage limit reached"
+        clean = strip_ansi(messy)
+        self.assertNotIn("◈", clean)
+        self.assertIn("Free usage limit reached", clean)
+
+    def test_failure_text_has_no_escape_codes(self):
+        spec = AgentSpec(name="opencode", command=["opencode", "run", "{message}"])
+        adapter = CliAdapter(spec, runner=lambda c, e, w, t: (1, "", "◈[91mError: ◈[0mboom"))
+        reply = adapter.send("হাই")
+        self.assertFalse(reply.ok)
+        self.assertNotIn("◈", reply.text)
+
+    def test_fallback_runs_when_limit_reached(self):
+        seen = []
+
+        def runner(cmd, env, cwd, timeout):
+            seen.append(cmd)
+            if "--fallback-model" in cmd:
+                return 0, "fallback উত্তর", ""
+            return 1, "", "Free usage limit reached"
+
+        spec = AgentSpec(
+            name="opencode",
+            command=["opencode", "run", "{message}"],
+            fallback_commands=[["opencode", "run", "--fallback-model", "{message}"]],
+        )
+        reply = CliAdapter(spec, runner=runner).send("হাই")
+        self.assertTrue(reply.ok)
+        self.assertEqual(reply.text, "fallback উত্তর")
+        self.assertEqual(len(seen), 2)
+
+    def test_no_fallback_on_unrelated_error(self):
+        seen = []
+
+        def runner(cmd, env, cwd, timeout):
+            seen.append(cmd)
+            return 1, "", "syntax error in your code"
+
+        spec = AgentSpec(
+            name="opencode",
+            command=["opencode", "run", "{message}"],
+            fallback_commands=[["opencode", "run", "--alt", "{message}"]],
+        )
+        reply = CliAdapter(spec, runner=runner).send("হাই")
+        self.assertFalse(reply.ok)
+        self.assertEqual(len(seen), 1)  # অকারণে দ্বিতীয়বার চালায়নি
+
+    def test_empty_output_moves_to_fallback(self):
+        seen = []
+
+        def runner(cmd, env, cwd, timeout):
+            seen.append(cmd)
+            if "--alt" in cmd:
+                return 0, "এবার উত্তর আছে", ""
+            return 0, "   ", ""
+
+        spec = AgentSpec(
+            name="claude",
+            command=["claude", "-p", "{message}"],
+            fallback_commands=[["claude", "--alt", "{message}"]],
+        )
+        reply = CliAdapter(spec, runner=runner).send("হাই")
+        self.assertTrue(reply.ok)
+        self.assertEqual(len(seen), 2)
