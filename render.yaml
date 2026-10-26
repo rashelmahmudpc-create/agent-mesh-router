@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: hermes
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /
+    autoDeployTrigger: off
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_ALLOWED_USERS
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: HERMES_DASHBOARD_PASSWORD
+        sync: false
+      - key: PORT
+        value: "10000"
+      - key: HERMES_DASHBOARD
+        value: "1"
+      - key: HERMES_DASHBOARD_HOST
+        value: "0.0.0.0"
+      - key: HERMES_DASHBOARD_PORT
+        value: "10000"
+      - key: HERMES_HOME
+        value: "/opt/data"

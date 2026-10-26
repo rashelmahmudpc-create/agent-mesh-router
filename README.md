@@ -1,233 +1,29 @@
-# agent-mesh-router
+# Hermes Agent on Render
+This repo runs Hermes Agent on Render's free Docker tier. It keeps the official image, adds a tiny health server, and keeps state in env vars.
 
-A multi-agent orchestration framework for routing tasks across specialized agents, tools, and integrations.
-
-## 🧠 Shared Brain
-
-সব এজেন্টের জন্য একটাই নির্দেশনা-ফাইল: **[`AGENTS.md`](AGENTS.md)** (ZAYAN GLOBAL BRAIN v1.1)।
-
-| এজেন্ট | কোথা থেকে পড়ে |
-|---|---|
-| Claude Code | `CLAUDE.md` → `AGENTS.md` |
-| OpenCode / Codex / Hermes | `AGENTS.md` (নিজে থেকেই) |
-| Cline | `.clinerules` → `AGENTS.md` |
-| Gemini CLI | `GEMINI.md` → `AGENTS.md` |
-| GitHub Copilot | `.github/copilot-instructions.md` |
-
-> নিয়ম বদলাতে হলে **শুধু `AGENTS.md`** বদলান — বাকিগুলো কেবল পয়েন্টার।
-
-**ব্রেইন এখানেই থাকে** — রাউটার কোড এই রিপোতে, GitHub Actions এ চলে।
-পিসি, সার্ভার বা কার্ড কিছুই লাগে না। এজেন্টরা কাজ করে ওদের নিজের জায়গায়।
-
----
-
-## 🚀 ৩ মিনিটে শুরু (বাংলা)
-
-```bash
-# ১) টিমে কারা আছে দেখুন
-python3 -m mesh.cli --list
-
-# ২) স্বাস্থ্য পরীক্ষা — কী ইনস্টল আছে, কোন key আছে
-python3 -m mesh.cli --doctor
-
-# ৩) কে সাড়া দেয়? (প্রতিটা এজেন্টকে এক লাইনের প্রশ্ন)
-python3 -m mesh.cli --probe --dry-run
-
-# ৪) নিজে একবার পরীক্ষা করুন — কিছুই চালাবে না, শুধু দেখাবে
-python3 -m mesh.cli "হাই সবাই" --mode group --dry-run
-
-# ৫) কাজ ভাগ করে দিন (একজনকে)
-python3 -m mesh.cli "এই bug টা ঠিক করো" --mode direct
-
-# ৬) গ্রুপ চ্যাট (সবাই উত্তর দেয়, কেউ কাউকে @mention করতে পারে)
-python3 -m mesh.cli "হাই" --mode group
+```text
+Render -> health port -> start.sh -> /opt/hermes/docker/entrypoint-dispatch.sh -> gateway run
 ```
 
-> 🔑 কোনো API key ছাড়াও **`--dry-run`** দিয়ে পুরো সিস্টেম পরীক্ষা করা যায়।
+## Deploy
+1. Import the Render blueprint.
+2. Set the four secret env vars in the Render dashboard.
+3. Deploy the service.
 
----
+## Free tier reality check
+- Render free web services spin down after about 15 minutes; use UptimeRobot to ping the service URL every 5-10 minutes.
+- Free workspaces share 750 instance-hours/month.
+- The free tier gives 512 MB RAM; heavy browser automation may OOM.
+- State is wiped on restart because there is no persistent disk.
 
-## 📱 মেশ চ্যাট — iPhone-এ অ্যাপের মতো (নতুন)
+## Risks
+The health-server + exec wrapper is small glue around the official image. If the official image ever moves `entrypoint-dispatch.sh`, point the ENTRYPOINT back to `/init` or run the official image directly.
 
-ChatGPT-স্টাইল একটা চ্যাট অ্যাপ — হোম স্ক্রিনে বসিয়ে সাধারণ অ্যাপের মতো ব্যবহার করা যায়।
+## Troubleshooting
+| Problem | Likely cause | Fix |
+| --- | --- | --- |
+| No open ports / restart loop | No port bound on `$PORT` | Keep the health server running before `exec` |
+| OOM | 512 MB free-tier limit | Reduce concurrency and disable heavy automation |
+| Bot silent | Missing secrets or allowlist | Check Telegram token, allowed users, and OpenRouter key |
 
-| ধাপ | কী করবেন |
-|---|---|
-| ১ | `docs/app/` ফোল্ডারটাই অ্যাপ (vanilla HTML/CSS/JS — কোনো ফ্রেমওয়ার্ক নেই) |
-| ২ | Settings → Pages → Source: **Deploy from a branch** → `main` + folder **/docs** |
-| ৩ | iPhone-এ Safari → **Share → Add to Home Screen** |
-| ৪ | (ঐচ্ছিক) `worker/` ডিপ্লয় করে সেটিংসে ঠিকানা দিলে আসল এজেন্টরা উত্তর দেয় |
-
-> 🟡 কিছু না করলেও অ্যাপ চলবে — **ডেমো মোড**, ইন্টারনেট লাগে না।
-> 🟢 **লাইভ মোড**-এ কথা যায় GitHub Issue-এ, এজেন্টরা উত্তর দেয়, অ্যাপ সেটা তুলে আনে।
-
-বিস্তারিত (বাংলা): **[`docs/pwa-bn.md`](docs/pwa-bn.md)**
-
----
-
-## 🧩 দুইটা মোড
-
-| মোড | কী হয় | কখন |
-|---|---|---|
-| 🎯 `direct` | রাউটার ঠিক করে **কে করবে**, শুধু তাকেই ডাকে (ব্যর্থ হলে ব্যাকআপ) | আসল কাজ |
-| 👥 `group` | সবাই একসাথে উত্তর দেয়; কেউ `@claude` লিখলে সে পরের রাউন্ডে উত্তর দেয় | আলোচনা / মত নেওয়া |
-
-## 👥 গ্রুপ চ্যাট = GitHub Issue (হলঘর)
-
-1. Issue এ লিখুন: `@mesh হাই সবাই`
-2. `.github/workflows/mesh.yml` ওঠে → আগের **comment-গুলো পড়ে** (`mesh/issue.py` → `fetch_hall`)
-3. সবাই একসাথে উত্তর দেয়, প্রতিটা উত্তর **comment** হয়ে Issue-তে ফিরে আসে
-4. কেউ কাউকে `@claude` বললে পরের রাউন্ডে সে উত্তর দেয়
-
-🛡️ নিরাপত্তা: প্রতিটা comment লেখার আগে **key/token মুছে ফেলা হয়** (`redact`)।
-🔁 লুপ বন্ধ: বটের comment আর `<!-- mesh:… -->` চিহ্নযুক্ত comment ওয়ার্কফ্লো চালায় না।
-
-## 🔑 Key পুল ও priority
-
-```
-১. 🖐️ OpenHands (ওদের ক্লাউড, priority 1)
-২. 🧑‍💻 OpenCode  → ৩. ☤ Hermes  → ৪. 🟠 Claude Code
-```
-
-- quota/429 হলে key **১ ঘণ্টা কুলডাউনে** (`.mesh/keystate.json`), পরের রানে পিছনে যায়
-- বিস্তারিত: [`docs/key-pool-bn.md`](docs/key-pool-bn.md)
-
-## 🔁 ব্যর্থ হলে কী হয়
-
-1. **খালি উত্তর** = ব্যর্থ (সফল নয়) — `empty` ফ্ল্যাগ
-2. `usage limit` / `unauthorized` / `credits` দেখলে → **fallback command** চেষ্টা
-3. কোটা-জাতীয় সমস্যা হলে → **পরের key** (`OPENROUTER_API_KEY_2`)
-4. সব ব্যর্থ হলে **কারণসহ comment** Issue এ যায় — `◈[91m` এর মতো টার্মিনাল কোড সরিয়ে (`strip_ansi`)
-
-## 🛡️ খরচ ও লুপ নিয়ন্ত্রণ
-
-`config/agents.json` এর `settings`:
-
-| সেটিং | অর্থ | ডিফল্ট |
-|---|---|---|
-| `max_rounds` | গ্রুপ চ্যাটে সর্বোচ্চ কত রাউন্ড | 3 |
-| `max_calls_per_run` | এক রানে মোট সর্বোচ্চ কত কল | 8 |
-| `max_pair_calls` | দুই এজেন্ট পরস্পরকে সর্বোচ্চ কতবার ডাকবে | 3 |
-
-**Key ঘোরানো:** `OPENROUTER_API_KEY`, `OPENROUTER_API_KEY_2`, … — একটা key রেট-লিমিটে আটকালে
-পরেরটা নিজে থেকেই ব্যবহার হয় (`mesh/keys.py`)। ২–৩টাই যথেষ্ট, বেশি ঘোরানো নিরাপদ নয়।
-
----
-
-## 🧠 টিম (এবং কেন এমন)
-
-| এজেন্ট | ধরন | মাথা | key লাগে? |
-|---|---|---|---|
-| 🧑‍💻 **OpenCode** | CLI | DeepSeek V4.1 Flash (ফ্রি) · লিমিট শেষ হলে OpenRouter fallback | ❌ |
-| 🟠 **Claude Code** | CLI | OpenRouter `:free` মডেল (fallback ২টা) | ✅ OpenRouter |
-| ☤ **Hermes** | CLI | `hermes-agent` (pip) · `openrouter/free` | ✅ OpenRouter |
-| 🟦 **Cline** | ⏸️ বন্ধ | ফ্রি টিয়ারে টোকেন বাজেট অনেক বড় চায় | — |
-| 🖐️ **OpenHands** | ⏸️ key চাই | ওদের ক্লাউড **API** (priority 1) — `OPENHANDS_API_KEY` দিলেই চালু | ❌ (ওদের ফ্রি) |
-
-📊 সব কাজের অবস্থা এক পাতায়: **[`docs/status-bn.md`](docs/status-bn.md)**
-
-**সিদ্ধান্ত:** 🧠 ম্যানেজার = **আমাদের কোড** (কোনো AI কল নেই, ০ খরচ, ভুল করে না)।
-Hermes ও বাকিরা = **কর্মী**। বিস্তারিত: [`docs/design-bn.md`](docs/design-bn.md)
-
----
-
-## 💸 টাকা নেই? — সমস্যা নেই
-
-| এজেন্ট | খরচ | কী লাগে |
-|---|---|---|
-| 🧑‍💻 OpenCode | **০** | কিছুই না — key ছাড়াই ফ্রি মডেল দিয়ে চলে ✅ |
-| 🟦 Cline | **০** | নিজের ফ্রি মডেল |
-| 🖐️ OpenHands | **০** | ওদের ক্লাউডে ফ্রি |
-| 🟠 Claude Code | **০** | OpenRouter এর `:free` মডেল (কার্ড লাগে না) |
-| ☤ Hermes | **০** | OpenRouter এর `:free` মডেল |
-
-**ডিফল্ট মডেল = `openrouter/free`** (OpenRouter এর অটো-রাউটার — নিজেই একটা ফ্রি মডেল বেছে নেয়)।
-`CLAUDE_MODEL` না দিলেও এটাই ব্যবহার হবে।
-
-👉 বিস্তারিত: **[`docs/free-models-bn.md`](docs/free-models-bn.md)**
-
-## 🚀 কোনো ক্লিক নেই — নিজে থেকেই চলে
-
-| কী করলে চলে | কী লাগে |
-|---|---|
-| 🚀 `main` এ **`.mesh-run`** ফাইলটা বদলালে | কিছুই না — নিজে থেকেই চলে |
-| ⏰ প্রতি ৬ ঘণ্টায় | কিছুই না |
-| 💬 Issue এ `@mesh …` লিখলে | একটা comment |
-| ▶️ হাতে চালাতে চাইলে | `Run workflow` |
-
-> 🔒 key না থাকলে অটো-রান নিজেই বাদ পড়ে (খরচ বাঁচাতে) — `Guard` ধাপ দেখুন।
-
-## 🔗 সরাসরি লিংক (কপি-পেস্ট)
-
-| কী করবেন | লিংক |
-|---|---|
-| 🔑 API key নিন (ফ্রি, কার্ড লাগে না) | https://openrouter.ai/keys |
-| 🔒 Secret বসান | https://github.com/rashelmahmudpc-create/agent-mesh-router/settings/secrets/actions |
-| 📋 Variable বসান (ঐচ্ছিক) | https://github.com/rashelmahmudpc-create/agent-mesh-router/settings/variables/actions |
-| ▶️ ম্যানুয়ালি চালান | https://github.com/rashelmahmudpc-create/agent-mesh-router/actions/workflows/mesh.yml |
-| ⚙️ রিপো সেটিংস | https://github.com/rashelmahmudpc-create/agent-mesh-router/settings |
-
-**ধাপ:** Secrets পেজ → `New repository secret` → Name: `OPENROUTER_API_KEY` → Secret: `sk-or-...` → **Add secret**
-
-> 💡 কমান্ড দিয়েও করা যায় (key চ্যাটে লিখবেন না):
-> ```bash
-> gh secret set OPENROUTER_API_KEY --repo rashelmahmudpc-create/agent-mesh-router
-> ```
-
-## 🔑 GitHub Secrets এ যা বসাতে হবে
-
-```
-OPENROUTER_API_KEY      # Claude Code + Hermes — কার্ড লাগে না (openrouter.ai/keys)
-OPENROUTER_API_KEY_2    # (ঐচ্ছিক) ব্যাকআপ
-GEMINI_API_KEY          # (ঐচ্ছিক) ভবিষ্যতের ছোট রাউটারের জন্য
-XAI_API_KEY             # (ঐচ্ছিক) রিভিউয়ার / দ্বিতীয় মত
-```
-
-📋 Variable (ঐচ্ছিক): `CLAUDE_MODEL` = `openrouter/free` বা যেকোনো `:free` মডেল আইডি।
-
-> 🚫 `GITHUB_TOKEN` এমনিতেই থাকে — `gh` দিয়ে Issue/comment করার জন্য।
-
----
-
-## 🛠️ কমান্ড এক নজরে
-
-| কমান্ড | কাজ |
-|---|---|
-| `python3 -m mesh.cli --list` | টিমে কারা আছে |
-| `python3 -m mesh.cli --doctor` | 🩺 কী ইনস্টল, কোন key আছে, কী নেই |
-| `python3 -m mesh.cli --probe` | 🔎 প্রতিটা এজেন্টকে ছোট প্রশ্ন — কে সাড়া দেয় |
-| `python3 -m mesh.cli "..." --mode direct` | 🎯 কাজ ভাগ করে দেওয়া |
-| `python3 -m mesh.cli "..." --mode group` | 👥 সবাই একসাথে |
-| `--dry-run` | কিছুই চালাবে না, শুধু দেখাবে |
-| `--issue N` | ওই Issue-কে হলঘর বানাও + উত্তর comment করো |
-| `--json` | মেশিন-পাঠ্য আউটপুট |
-| `--free-model-list N` | আজকের সেরা N টা ফ্রি মডেল |
-| `--openhands "কাজ"` | 🖐️ ওদের ক্লাউড API দিয়ে একবার চালাও |
-
-`--doctor` এর ফল: ✅ ঠিক · ⚠️ সতর্কতা (এজেন্ট ইনস্টল নেই) · ❌ সমস্যা (key নেই)।
-
-## 🗂️ ফোল্ডার
-
-```
-config/agents.json      # টিমের তালিকা (নতুন এজেন্ট যোগ এখানেই)
-mesh/router.py          # 🧠 ম্যানেজার: direct + group, সীমা রক্ষা
-mesh/adapters.py        # এজেন্টের সাথে কথা বলার সেতু (cli / github_issue)
-mesh/keys.py            # key ঘোরানো
-mesh/chat.py            # চ্যাটের লগ (.mesh/transcript.jsonl)
-mesh/doctor.py          # 🩺 স্বাস্থ্য পরীক্ষা
-mesh/models.py          # 🆓 প্রতি রানে ফ্রি মডেল খুঁজে নেয়
-docs/app/               # 📱 চ্যাট অ্যাপ (PWA, iPhone-এ Add to Home Screen)
-worker/                 # 🔌 অ্যাপের সার্ভার (Cloudflare Worker, ঐচ্ছিক)
-tools/                  # 🎨 আইকন বানানোর স্ক্রিপ্ট (PIL ছাড়াই)
-tests/                  # Python + Node পরীক্ষা — key ছাড়াই চলে
-docs/handoffs/          # 📮 কাজের হ্যান্ডঅফ
-.github/workflows/      # ব্রেইন যেখানে চলে (mesh.yml) + পরীক্ষা (ci.yml)
-```
-
-## ✅ পরীক্ষা
-
-```bash
-python3 -m unittest discover -s tests -v     # সব (Python ৭৯টা + Node অংশ)
-node tests/js/worker_check.mjs               # শুধু Worker
-cd docs/app && node --test tests/md.test.mjs  # শুধু মার্কডাউন
-```
+This setup is intentionally minimal and uses environment variables for all state that must survive a restart.
