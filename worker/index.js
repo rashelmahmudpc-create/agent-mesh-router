@@ -332,7 +332,14 @@ function fastReady(env) {
 }
 
 // 🧹 মডেলের "Analize the Request / Attempt 1 / Constraint" জাতীয় ভেতরের কথা বাদ দিই
-const META_PREFIX = /^\s*(?:[\d]+[.)]\s*)?(?:analy[sz]e|analysis|constraints?|constraint check|drafting|draft|attempt\s*\d|internal monologue|monologue|let me|hmm\b|thinking|reasoning|step\s*\d|plan\b|understanding|user\s*:|language\s*:|tone\/style|tone\s*:|length\s*:|structure\s*:|goal\s*:|task\s*:|বিশ্লেষণ|পরিকল্পনা|চিন্তা)\b/i;
+//
+// শেষের সীমানাটা `\b` নয়। JS-এ `\b` শুধু ASCII, তাই বাংলা অক্ষরের পরে কখনো
+// মেলে না — `/বিশ্লেষণ\b/` কখনো fire করত না, ফলে বাংলায় ভেতরের কথা ("বিশ্লেষণ:",
+// "পরিকল্পনা:", "চিন্তা:") ছেঁকে বাদ যেত না এবং ওগুলোই মালিকের কাছে উত্তর হয়ে যেত।
+// `(?![\p{L}\p{M}])` + `u` flag বাংলা অক্ষর ও যুক্তাক্ষরের ম্যাট্রিকেও কাজ করে।
+// ইংরেজি দিকটা অপরিবর্তিত: বিকল্পগুলো সবই অক্ষরে শেষ হয়, তাই "not a word char"
+// আর "not a letter/mark" একই ফল দেয়।
+const META_PREFIX = /^\s*(?:[\d]+[.)]\s*)?(?:analy[sz]e|analysis|constraints?|constraint check|drafting|draft|attempt\s*\d|internal monologue|monologue|let me|hmm\b|thinking|reasoning|step\s*\d|plan\b|understanding|user\s*:|language\s*:|tone\/style|tone\s*:|length\s*:|structure\s*:|goal\s*:|task\s*:|বিশ্লেষণ|পরিকল্পনা|চিন্তা)(?![\p{L}\p{M}])/iu;
 const ANSWER_MARKERS = /^(?:সারমর্ম|উত্তর|সংক্ষেপে|এক কথায়|আসসালামু|হ্যালো|হাই|স্যার)/;
 
 function cleanAnswer(text) {
