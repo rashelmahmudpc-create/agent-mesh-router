@@ -586,6 +586,57 @@ class GroupHistoryTest(unittest.TestCase):
         self.assertLess(text.index("আগের কথা"), text.index("নতুন প্রশ্ন এটা"))
 
 
+class LocalMemoryTest(unittest.TestCase):
+    """CLI-তে পরের রান আগের কথা জানে — Store-এর ট্রান্সক্রিপ্ট ফিরে পড়া হয়।
+
+    আগে Store-এ সব লেখা হতো কিন্তু `transcript_text()` কেউ ডাকত না — direct মোড
+    প্রতিবার মেমরিহীন ছিল (স্যার নতুন করে সব বোঝাতে হত)। 😅
+    """
+
+    def _seed(self, router: Router) -> None:
+        router.store.append({
+            "mode": "call", "agent": "opencode", "sender": "owner", "ok": True,
+            "ask": "আগের প্রশ্ন: লগইন বাগটা দেখো",
+            "text": "আগের উত্তর: টোকেন রিফ্রেশ ঠিক করা হলো",
+        })
+
+    def _sent(self, runner: FakeRunner) -> str:
+        return " ".join(" ".join(cmd) for cmd, _env in runner.calls)
+
+    def test_direct_mode_remembers_previous_turns(self):
+        runner = FakeRunner()
+        router = make_router(runner)
+        self._seed(router)
+        router.direct("এবার সাইনআপ পেজটা দেখা")
+        sent = self._sent(runner)
+        self.assertIn("আগের উত্তর: টোকেন রিফ্রেশ ঠিক করা হলো", sent)
+        self.assertIn("আগের প্রশ্ন: লগইন বাগটা দেখো", sent)
+        # স্মৃতি আগে, নতুন প্রশ্ন শেষে — নইলে সারমর্ম লিখে দেয়
+        self.assertLess(sent.index("আগের উত্তর"), sent.index("এবার সাইনআপ পেজটা দেখা"))
+
+    def test_store_keeps_the_question(self):
+        runner = FakeRunner()
+        router = make_router(runner)
+        router.direct("এই bug টা ঠিক করো")
+        row = router.store.entries()[-1]
+        self.assertEqual(row.get("ask"), "এই bug টা ঠিক করো")
+
+    def test_no_double_memory_when_caller_sends_its_own(self):
+        """অ্যাপ (slow lane) নিজে `[আগের কথা]` পাঠায় — তখন মেশ আর দেয় না।"""
+        runner = FakeRunner()
+        router = make_router(runner)
+        self._seed(router)
+        router.direct("[আগের কথা]\n- স্যার: কিউ\n\nনতুন প্রশ্ন")
+        self.assertEqual(self._sent(runner).count("আগের কথা"), 1)
+
+    def test_group_falls_back_to_local_memory(self):
+        runner = FakeRunner()
+        router = make_router(runner)
+        self._seed(router)
+        router.group("নতুন প্রশ্ন")
+        self.assertIn("আগের উত্তর: টোকেন রিফ্রেশ ঠিক করা হলো", self._sent(runner))
+
+
 class RedactTest(unittest.TestCase):
     def test_masks_common_key_shapes(self):
         from mesh.issue import redact

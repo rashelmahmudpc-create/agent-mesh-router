@@ -53,9 +53,16 @@ class Store:
         )
 
     def transcript_text(self, limit: int = 12) -> str:
+        """সাম্প্রতিক কথা প্রশ্ন+উত্তর জোড়া হিসেবে — এজেন্ট যেন বোঝে কী প্রশ্নের উত্তর।
+
+        শুধু উত্তর দিলে প্রসঙ্গ অন্ধকার থাকে (কোন প্রশ্নের উত্তর?), তাই ask থাকলে সেটাও দেখাই।
+        """
         rows = []
         for e in self.recent(limit):
             speaker = e.get("agent") or e.get("sender") or "unknown"
+            ask = (e.get("ask") or "").strip().replace("\n", " ")
+            if ask:
+                rows.append(f"- স্যার → {speaker}: {ask[:300]}")
             text = (e.get("text") or "").strip().replace("\n", " ")
             if text:
                 rows.append(f"- {speaker}: {text[:300]}")

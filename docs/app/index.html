@@ -1084,14 +1084,21 @@ async function sendMessage(text,opts={}){
   const ctx={chat,m:null,group:cfg.mode==='group',typing:{},gm:{}};
   if(!ctx.group){ctx.m={role:'ai',text:'',steps:[],t:Date.now(),live:true,status:'ভাবছে…'};chat.msgs.push(ctx.m);addMsgEl(ctx.m)}
   const t0=Date.now();
+  let seen=false; // সার্ভার থেকে অন্তত একটা ইভেন্ট এল কিনা — মাঝপথে কাটা vs কখনো conect হয়নি
   try{
     let uploaded=[];
     if(!isDemo()&&!isGh()&&atts.length){if(ctx.m){ctx.m.status='ফাইল আপলোড হচ্ছে…';refreshAI(ctx.m)}uploaded=await uploadAll(atts,sig)}
     const run=fastOn()?fastRun:isDemo()?demoRun:isGh()?ghRun:netRun;
-    await run({text,uploaded,mode:cfg.mode,chat,voice:opts.voice,atts,agents:pickedAgents()},ev=>handleEv(ev,ctx),sig);
+    await run({text,uploaded,mode:cfg.mode,chat,voice:opts.voice,atts,agents:pickedAgents()},ev=>{seen=true;handleEv(ev,ctx)},sig);
   }catch(e){
     if(e.name==='AbortError'){if(ctx.m&&ctx.m.text)ctx.m.text+='\n\n_— থামানো হয়েছে_'}
-    else{const msg=(e.message||'সংযোগে সমস্যা')+(fastOn()?' — ⚡ API কী/মডেল দেখুন':isDemo()?'':isGh()?' — GitHub টোকেন/রিপো/Issue দেখুন':' — সার্ভারের ঠিকানা/টোকেন দেখুন');if(ctx.m)ctx.m.err=msg;else toast(msg)}
+    else{
+      // সংযোগ hidup ছিল কিন্তু মাঝপথে কেটে গেছে (অ্যাপ পেছনে গলে/iOS স্ট্রিম বন্ধ) —
+      // তখন "টোকেন দেখুন" বলাটা মিথ্যা; উত্তর Issue #3-এ জমা হয়েছে, একটু পর ফিরে দেখুন।
+      const cut=seen?'সংযোগ কেটে গেছে (অ্যাপ পেছনে গেলে iOS স্ট্রিম বন্ধ করে) — উত্তর Issue #3-এ জমা হচ্ছে, একটু পর আবার দেখুন'
+        :(e.message||'সংযোগে সমস্যা')+(fastOn()?' — ⚡ API কী/মডেল দেখুন':isDemo()?'':isGh()?' — GitHub টোকেন/রিপো/Issue দেখুন':' — সার্ভারের ঠিকানা/টোকেন দেখুন');
+      if(ctx.m)ctx.m.err=cut;else toast(cut)
+    }
   }
   Object.values(ctx.typing).forEach(r=>r.remove());
   if(ctx.m){flush(ctx.m);ctx.m.live=false;ctx.m.dur=(Date.now()-t0)/1000;ctx.m.status='';refreshAI(ctx.m,true)}
